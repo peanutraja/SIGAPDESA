@@ -1,0 +1,99 @@
+/* ======== CUSTOM RED SIDEBAR + ACTIVE STATE ======== */
+
+/* Sidebar utama */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 14rem;
+    height: 100vh;
+    background-color: #E50014 !important;
+    color: #fff;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+/* Warna teks sidebar */
+.sidebar .nav-item .nav-link,
+.sidebar .sidebar-brand {
+    color: #fff !important;
+}
+
+/* Hover efek */
+.sidebar .nav-item .nav-link:hover {
+    background-color: #b30010 !important;
+    color: #fff !important;
+    border-radius: 0.35rem;
+}
+
+/* Active menu (halaman sedang dikunjungi) */
+.sidebar .nav-item.active .nav-link {
+    background-color: #99000e !important;
+    color: #fff !important;
+    font-weight: 600;
+    border-left: 4px solid #fff;
+}
+
+/* Icon ikut warna */
+.sidebar .nav-item.active .nav-link i {
+    color: #fff !important;
+}
+
+/* Supaya konten ga ketiban sidebar */
+#content-wrapper {
+    margin-left: 14rem;
+    background-color: #f8f9fc;
+    min-height: 100vh;
+}
+
+/* Footer */
+footer {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+}
+
+/* Scrollbar sidebar */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+/* ======== CUSTOM RED BUTTON STYLE ======== */
+
+.btn-primary {
+    background-color: #E50014 !important;
+    border-color: #E50014 !important;
+    color: #fff !important;
+    border-radius: 0.35rem; /* biar sudutnya lembut */
+    transition: all 0.2s ease-in-out;
+}
+
+/* Hover effect */
+.btn-primary:hover {
+    background-color: #b30010 !important;
+    border-color: #b30010 !important;
+}
+
+/* Klik atau fokus */
+.btn-primary:focus,
+.btn-primary:active {
+    background-color: #99000e !important;
+    border-color: #99000e !important;
+    box-shadow: 0 0 0 0.25rem rgba(229, 0, 20, 0.3) !important;
+    outline: none !important;
+}
+
+/* Optional: buat tombol lebih elegan */
+.btn-primary {
+    box-shadow: 0 2px 6px rgba(229, 0, 20, 0.3);
+}
+
+.btn-primary:hover {
+    box-shadow: 0 4px 12px rgba(229, 0, 20, 0.4);
+}
+
