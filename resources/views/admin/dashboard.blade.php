@@ -97,12 +97,18 @@
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">Kabupaten</label>
                 <select id="filterKabupaten" class="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:bg-slate-100 disabled:text-slate-400" {{ request('provinsi') ? '' : 'disabled' }}>
                     <option value="" class="bg-white text-slate-900">Semua Kabupaten</option>
+                    @foreach($kabupatenList ?? [] as $kb)
+                        <option value="{{ $kb->id_kabupaten }}" class="bg-white text-slate-900" {{ request('kabupaten') == $kb->id_kabupaten ? 'selected' : '' }}>{{ $kb->nama_kabupaten }}</option>
+                    @endforeach
                 </select>
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">Kecamatan</label>
                 <select id="filterKecamatan" class="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:bg-slate-100 disabled:text-slate-400" {{ request('kabupaten') ? '' : 'disabled' }}>
                     <option value="" class="bg-white text-slate-900">Semua Kecamatan</option>
+                    @foreach($kecamatanList ?? [] as $kc)
+                        <option value="{{ $kc->id_kecamatan }}" class="bg-white text-slate-900" {{ request('kecamatan') == $kc->id_kecamatan ? 'selected' : '' }}>{{ $kc->nama_kecamatan }}</option>
+                    @endforeach
                 </select>
             </div>
         </div>

@@ -221,9 +221,9 @@
         });
         mapPemdes.addLayer(markerCluster); $('#stat-total-warga').text(statTotalWarga); $('#stat-lansia').text(statLansia); $('#stat-balita').text(statBalita); $('#stat-ibu_hamil').text(statIbuHamil); $('#stat-disabilitas').text(statDisabilitas);
     }
-    function applyFilters() { renderMapMarkers(); }
+    function applyFilters() { renderMapMarkers(); loadEvacuationPoints(); }
     function initRwFilters() {
-        const uniqueRw = ['Semua']; rawRumahData.forEach(r => { const rw = r.rw || r.nomor_rw; if (rw && !uniqueRw.includes(rw)) uniqueRw.push(rw); }); uniqueRw.sort();
+        const uniqueRw = ['Semua']; rawRumahData.forEach(r => { const rw = r.rw || r.nomor_rw; if (rw && !uniqueRw.includes(rw)) uniqueRw.push(rw); }); uniqueRw.sort((a, b) => a === 'Semua' ? -1 : b === 'Semua' ? 1 : String(a).localeCompare(String(b), undefined, { numeric: true }));
         let html = ''; uniqueRw.forEach(rw => { const isSel = (rw === selectedRw) ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate-800'; html += `<span class="badge ${isSel} text-[10px] font-bold cursor-pointer hover:bg-indigo-600 hover:text-white" onclick="selectRwFilter('${rw}')">${rw}</span>`; });
         $('#rw-filter-container').html(html);
     }

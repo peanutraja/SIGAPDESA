@@ -512,7 +512,7 @@
             const rwVal = r.rw || r.nomor_rw;
             if (rwVal && !uniqueRw.includes(rwVal)) uniqueRw.push(rwVal);
         });
-        uniqueRw.sort();
+        uniqueRw.sort((a, b) => a === 'Semua' ? -1 : b === 'Semua' ? 1 : String(a).localeCompare(String(b), undefined, { numeric: true }));
 
         let html = '';
         uniqueRw.forEach(rw => {

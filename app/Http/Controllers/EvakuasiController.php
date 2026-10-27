@@ -170,7 +170,7 @@ class EvakuasiController extends Controller
                     : "Rumah " . $row->id_rumah;
 
                 $strRt = !empty($row->nomor_rt) ? "RT " . str_pad($row->nomor_rt, 3, "0", STR_PAD_LEFT) : "-";
-                $strRw = !empty($row->nomor_rw) ? "RW " . str_pad($row->nomor_rw, 3, "0", STR_PAD_LEFT) : "Semua";
+                $strRw = !empty($row->nomor_rw) ? "RW " . str_pad($row->nomor_rw, 3, "0", STR_PAD_LEFT) : "";
 
                 $rumahData[] = [
                     "id" => (int)$row->id_rumah,

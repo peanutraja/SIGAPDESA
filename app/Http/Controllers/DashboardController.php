@@ -63,16 +63,34 @@ class DashboardController extends Controller
         // 1. DASHBOARD GMLS / SUPER ADMIN (Seluruh Wilayah)
         // ----------------------------------------------------
         if ($role === 'gmls' || $role === 'admin') {
-            $provinsi          = DB::table('provinsi')->orderBy('nama_provinsi', 'asc')->get();
-            $total_warga       = DB::table('warga')->count();
-            $total_kk          = DB::table('keluarga')->count();
-            $jumlah_hamil      = DB::table('warga')->where('status_kehamilan', 1)->count();
-            $total_disabilitas = DB::table('warga')
+            // Filter wilayah dari query string (?provinsi=&kabupaten=&kecamatan=)
+            $fProvinsi  = $request->query('provinsi');
+            $fKabupaten = $request->query('kabupaten');
+            $fKecamatan = $request->query('kecamatan');
+
+            $provinsi       = DB::table('provinsi')->orderBy('nama_provinsi', 'asc')->get();
+            $kabupatenList  = $fProvinsi ? DB::table('kabupaten')->where('id_provinsi', $fProvinsi)->orderBy('nama_kabupaten', 'asc')->get() : collect();
+            $kecamatanList  = $fKabupaten ? DB::table('kecamatan')->where('id_kabupaten', $fKabupaten)->orderBy('nama_kecamatan', 'asc')->get() : collect();
+
+            $qWarga = DB::table('warga')
+                ->when($fProvinsi, fn($q) => $q->where('id_provinsi', $fProvinsi))
+                ->when($fKabupaten, fn($q) => $q->where('id_kabupaten', $fKabupaten))
+                ->when($fKecamatan, fn($q) => $q->where('id_kecamatan', $fKecamatan));
+
+            $total_warga       = (clone $qWarga)->count();
+            $total_kk          = DB::table('keluarga as k')
+                ->when($fProvinsi || $fKabupaten || $fKecamatan, fn($q) => $q->join('rumah as r', 'k.id_rumah', '=', 'r.id_rumah'))
+                ->when($fProvinsi, fn($q) => $q->where('r.id_provinsi', $fProvinsi))
+                ->when($fKabupaten, fn($q) => $q->where('r.id_kabupaten', $fKabupaten))
+                ->when($fKecamatan, fn($q) => $q->where('r.id_kecamatan', $fKecamatan))
+                ->count();
+            $jumlah_hamil      = (clone $qWarga)->where('status_kehamilan', 1)->count();
+            $total_disabilitas = (clone $qWarga)
                 ->whereNotNull('kategori_disabilitas')
                 ->where('kategori_disabilitas', '!=', 'Tidak Ada')
                 ->count();
 
-            $genderQuery = DB::table('warga')
+            $genderQuery = (clone $qWarga)
                 ->select(
                     DB::raw("SUM(CASE WHEN jenis_kelamin = 'L' THEN 1 ELSE 0 END) as laki"),
                     DB::raw("SUM(CASE WHEN jenis_kelamin = 'P' THEN 1 ELSE 0 END) as perempuan")
@@ -81,7 +99,7 @@ class DashboardController extends Controller
             $gender_labels = ['Laki-laki', 'Perempuan'];
             $gender_data   = [(int)($genderQuery->laki ?? 0), (int)($genderQuery->perempuan ?? 0)];
 
-            $usiaQuery = DB::table('warga')
+            $usiaQuery = (clone $qWarga)
                 ->select(
                     DB::raw("SUM(CASE WHEN TIMESTAMPDIFF(YEAR, tanggal_lahir, CURDATE()) < 18 THEN 1 ELSE 0 END) as anak"),
                     DB::raw("SUM(CASE WHEN TIMESTAMPDIFF(YEAR, tanggal_lahir, CURDATE()) BETWEEN 18 AND 59 THEN 1 ELSE 0 END) as dewasa"),
@@ -109,7 +127,7 @@ class DashboardController extends Controller
                 ->get();
 
             return view('admin.dashboard', compact(
-                'role', 'provinsi', 'total_warga', 'total_kk', 'jumlah_hamil', 'total_disabilitas', 
+                'role', 'provinsi', 'kabupatenList', 'kecamatanList', 'total_warga', 'total_kk', 'jumlah_hamil', 'total_disabilitas',
                 'gender_labels', 'gender_data', 'usia_data', 'rekapKabupaten', 'adminSession', 'admin', 'rumahData', 'laporan_pendatang'
             ));
         }
@@ -497,7 +515,7 @@ class DashboardController extends Controller
 
                 $namaRumah = !empty($row->nama_warga) ? "Kel. " . $row->nama_warga : "Rumah " . $row->id_rumah;
                 $strRt = !empty($row->nomor_rt) ? "RT " . str_pad($row->nomor_rt, 3, "0", STR_PAD_LEFT) : "-";
-                $strRw = !empty($row->nomor_rw) ? "RW " . str_pad($row->nomor_rw, 3, "0", STR_PAD_LEFT) : "Semua";
+                $strRw = !empty($row->nomor_rw) ? "RW " . str_pad($row->nomor_rw, 3, "0", STR_PAD_LEFT) : "";
 
                 $rumahData[] = [
                     "id" => (int)$row->id_rumah,
