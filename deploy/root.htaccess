@@ -1,0 +1,14 @@
+# Dipasang sebagai .htaccess di folder utama hosting (htdocs / public_html),
+# satu tingkat DI ATAS folder public/. Semua request diarahkan ke public/,
+# sehingga .env, vendor/, storage/, dll. tidak bisa dibuka dari browser.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Lapis kedua bila mod_rewrite mati: tolak file sensitif
+<FilesMatch "^(\.env.*|composer\.(json|lock)|artisan|.*\.sql|.*\.log)$">
+    Require all denied
+</FilesMatch>
+
+Options -Indexes

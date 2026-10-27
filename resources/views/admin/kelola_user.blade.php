@@ -299,7 +299,7 @@ $(document).ready(function() {
 
         if (id) {
             $.ajax({
-                url: '/get-kabupaten',
+                url: '{{ route('get.kabupaten') }}',
                 type: 'GET',
                 data: { id_provinsi: id, provinsi_id: id },
                 dataType: 'json',
@@ -331,7 +331,7 @@ $(document).ready(function() {
 
         if (id) {
             $.ajax({
-                url: '/get-kecamatan',
+                url: '{{ route('get.kecamatan') }}',
                 type: 'GET',
                 data: { id_kabupaten: id, kabupaten_id: id },
                 dataType: 'json',
@@ -362,7 +362,7 @@ $(document).ready(function() {
 
         if (id) {
             $.ajax({
-                url: '/get-desa',
+                url: '{{ route('get.desa') }}',
                 type: 'GET',
                 data: { id_kecamatan: id, kecamatan_id: id },
                 dataType: 'json',
@@ -431,7 +431,7 @@ function toggleWilayah() {
 
 function loadRwOptions() {
     if ($('#rw option').length <= 1) {
-        $.get('/get-rw', function(data) {
+        $.get('{{ route('get.rw') }}', function(data) {
             let options = '<option value="">-- Pilih RW --</option>';
             $.each(data, function(key, val) {
                 options += `<option value="${val.id_rw}">RW ${val.nomor_rw}</option>`;
@@ -443,7 +443,7 @@ function loadRwOptions() {
 
 function loadRtOptions() {
     if ($('#rt option').length <= 1) {
-        $.get('/get-rt', function(data) {
+        $.get('{{ route('get.rt') }}', function(data) {
             let options = '<option value="">-- Pilih RT --</option>';
             $.each(data, function(key, val) {
                 options += `<option value="${val.id_rt}">RT ${val.nomor_rt}</option>`;
