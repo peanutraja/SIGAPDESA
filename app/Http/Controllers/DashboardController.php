@@ -357,10 +357,23 @@ class DashboardController extends Controller
                 DB::raw("SUM(CASE WHEN TIMESTAMPDIFF(YEAR, w.tanggal_lahir, CURDATE()) <= 5 THEN 1 ELSE 0 END) as balita")
             )->first();
 
+            // NOTIFIKASI PENGAJUAN PERUBAHAN DATA DARI WARGA (status pending)
+            $pengajuan_pending = DB::table('pengajuan_update as p')
+                ->join('warga as w', 'p.id_warga', '=', 'w.id_warga')
+                ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
+                ->where('p.status', 'pending')
+                ->when(!empty($id_rt), fn($q) => $q->where('r.id_rt', $id_rt))
+                ->when(!empty($id_rw), fn($q) => $q->where('r.id_rw', $id_rw))
+                ->when(!empty($id_desa), fn($q) => $q->where('w.id_desa', $id_desa))
+                ->select('p.id_pengajuan', 'p.kategori_perubahan', 'p.alasan_perubahan', 'p.created_at', 'w.nik', 'w.nama_lengkap')
+                ->orderBy('p.created_at', 'desc')
+                ->get();
+
             return view('dashboard.rt', compact(
                 'role', 'lokasiRT', 'total_warga', 'tetap_count', 'sementara_count',
                 'gender_tetap', 'gender_sementara', 'domisili',
-                'usia_tetap', 'usia_sementara', 'ekonomi', 'kerentanan', 'adminSession', 'admin', 'rumahData', 'laporan_pendatang'
+                'usia_tetap', 'usia_sementara', 'ekonomi', 'kerentanan', 'adminSession', 'admin', 'rumahData', 'laporan_pendatang',
+                'pengajuan_pending'
             ));
         }
 

@@ -8,8 +8,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- DaisyUI v4 (kompatibel dengan Tailwind v3 dari Play CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="{{ asset('vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -38,6 +40,24 @@
     
     // Akses Kelola Akun: Hanya untuk GMLS/Admin OR Pejabat/Pemerintah Desa yang punya izin can_create_akun == 1
     $canManageUsers = in_array($userRole, ['gmls', 'admin']) || ($canCreateAkun === 1);
+
+    // Jumlah pengajuan perubahan data warga yang menunggu verifikasi (badge notifikasi sidebar)
+    $canVerifyPengajuan = in_array($userRole, ['ketua_rt', 'rt', 'gmls', 'admin']);
+    $pengajuanPendingCount = 0;
+    if ($canVerifyPengajuan) {
+        $idRtSes   = $adminSession['id_rt'] ?? $adminSession['rt'] ?? null;
+        $idRwSes   = $adminSession['id_rw'] ?? $adminSession['rw'] ?? null;
+        $idDesaSes = $adminSession['id_desa'] ?? null;
+        $isRtRole  = in_array($userRole, ['ketua_rt', 'rt']);
+        $pengajuanPendingCount = \Illuminate\Support\Facades\DB::table('pengajuan_update as p')
+            ->join('warga as w', 'p.id_warga', '=', 'w.id_warga')
+            ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
+            ->where('p.status', 'pending')
+            ->when($isRtRole && !empty($idRtSes), fn($q) => $q->where('r.id_rt', $idRtSes))
+            ->when($isRtRole && !empty($idRwSes), fn($q) => $q->where('r.id_rw', $idRwSes))
+            ->when($isRtRole && !empty($idDesaSes), fn($q) => $q->where('w.id_desa', $idDesaSes))
+            ->count();
+    }
 @endphp
 
 @if($isExecutive)
@@ -117,6 +137,14 @@
                 <a href="{{ route('warga.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all {{ request()->routeIs('warga.*') ? 'bg-rose-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800' }}">
                     <i class="fas fa-address-book w-4 text-center"></i> <span>Daftar Warga</span>
                 </a>
+                @if($canVerifyPengajuan)
+                <a href="{{ route('admin.pengajuan.index') }}" class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl transition-all {{ request()->routeIs('admin.pengajuan.*') ? 'bg-rose-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800' }}">
+                    <span class="flex items-center gap-3"><i class="fas fa-clipboard-check w-4 text-center text-emerald-400"></i> <span>Verifikasi Data</span></span>
+                    @if($pengajuanPendingCount > 0)
+                        <span class="min-w-[20px] h-5 px-1.5 rounded-full bg-amber-400 text-slate-900 text-[10px] font-black flex items-center justify-center">{{ $pengajuanPendingCount }}</span>
+                    @endif
+                </a>
+                @endif
                 <a href="{{ route('peta.sebaran') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all {{ request()->routeIs('peta.sebaran') ? 'bg-rose-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800' }}">
                     <i class="fas fa-map-marked-alt w-4 text-center text-amber-400"></i> <span>Peta Evakuasi</span>
                 </a>

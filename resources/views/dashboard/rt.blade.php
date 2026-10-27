@@ -65,6 +65,41 @@
     <div x-show="activeTab === 'operasional'" x-transition class="space-y-6">
         @php $totalWargaInt = $total_warga ?? 0; $tetapInt =$tetap_count ?? 0; $sementaraInt =$sementara_count ?? 0; $pct_tetap =$totalWargaInt > 0 ? round(($tetapInt / $totalWargaInt) * 100, 1) : 0; $pct_sementara =$totalWargaInt > 0 ? round(($sementaraInt / $totalWargaInt) * 100, 1) : 0; @endphp
 
+        <!-- Panel Notifikasi Pengajuan Perubahan Data Warga -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+            <div class="flex items-center justify-between border-b pb-2 mb-4 gap-2">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    Notifikasi Pengajuan Perubahan Data
+                    @if(isset($pengajuan_pending) && count($pengajuan_pending) > 0)
+                        <span class="px-2 py-0.5 rounded-full bg-rose-600 text-white text-xs font-extrabold">{{ count($pengajuan_pending) }}</span>
+                    @endif
+                </h3>
+                <a href="{{ route('admin.pengajuan.index') }}" class="text-xs font-bold text-rose-600 hover:text-rose-700 shrink-0">Lihat Semua <i class="fas fa-arrow-right"></i></a>
+            </div>
+            @if(isset($pengajuan_pending) && count($pengajuan_pending) > 0)
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50">
+                            <tr><th class="px-4 py-3">Nama Warga</th><th class="px-4 py-3">Kategori</th><th class="px-4 py-3">Alasan</th><th class="px-4 py-3">Tanggal</th><th class="px-4 py-3">Aksi</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach($pengajuan_pending as $pj)
+                            <tr class="border-b">
+                                <td class="px-4 py-3 font-semibold text-slate-800">{{ $pj->nama_lengkap }} <br><span class="text-xs font-normal text-slate-500">{{ $pj->nik }}</span></td>
+                                <td class="px-4 py-3">{{ $pj->kategori_perubahan }}</td>
+                                <td class="px-4 py-3">{{ \Illuminate\Support\Str::limit($pj->alasan_perubahan, 60) }}</td>
+                                <td class="px-4 py-3 whitespace-nowrap">{{ \Carbon\Carbon::parse($pj->created_at)->format('d/m/Y H:i') }}</td>
+                                <td class="px-4 py-3"><a href="{{ route('admin.pengajuan.index') }}" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap">Verifikasi</a></td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <p class="text-slate-500 text-sm italic">Belum ada pengajuan perubahan data dari warga.</p>
+            @endif
+        </div>
+
         <!-- Panel Laporan Pendatang Baru -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
             <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Notifikasi Pendatang Baru</h3>

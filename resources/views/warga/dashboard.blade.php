@@ -195,7 +195,7 @@
                     <p class="text-[10px] text-gray-400"><i class="fas fa-info-circle mr-1"></i> Data usulan ini akan diverifikasi terlebih dahulu oleh Ketua RT / Admin sebelum diperbarui di sistem.</p>
                 </div>
 
-                <button type="submit" class="btn bg-brandRed hover:bg-brandDarkRed text-white border-none rounded-xl font-bold text-xs gap-2 shadow-sm w-full sm:w-auto justify-center">
+                <button type="submit" class="btn bg-red-600 hover:bg-red-700 text-white border border-red-700 rounded-xl font-bold text-xs gap-2 shadow-md px-5 py-3 w-full sm:w-auto justify-center">
                     <i class="fas fa-paper-plane"></i> Kirim Permohonan Perubahan Data
                 </button>
             </form>
