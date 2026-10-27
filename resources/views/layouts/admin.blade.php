@@ -86,6 +86,12 @@
                 </div>
 
                 <div class="flex items-center gap-2.5">
+                    <button type="button" onclick="document.getElementById('contributors_modal').showModal()" title="Tim Kontributor"
+                        class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 text-xs font-bold transition shadow-sm border border-rose-200 cursor-pointer">
+                        <i class="fas fa-users"></i>
+                        <span class="hidden md:inline">Tim Kontributor</span>
+                    </button>
+
                     <!-- TOMBOL KELOLA AKUN: HANYA TAMPIL JIKA CAN_CREATE_AKUN == 1 ATAU GMLS -->
                     @if($canManageUsers)
                         <a href="{{ route('admin.user.index') }}" 
@@ -185,6 +191,11 @@
                     <span class="text-xs font-black text-slate-800 uppercase">SIGAPDESA <span class="text-rose-600">SYSTEM</span></span>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button type="button" onclick="document.getElementById('contributors_modal').showModal()" title="Tim Kontributor"
+                        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white hover:bg-rose-50 text-rose-600 text-[11px] font-extrabold transition border border-rose-200 cursor-pointer">
+                        <i class="fas fa-users"></i>
+                        <span class="hidden md:inline">Tim Kontributor</span>
+                    </button>
                     <div class="text-right hidden sm:block">
                         <p class="text-xs font-black text-slate-900 uppercase">{{ $userName }}</p>
                     </div>
@@ -197,6 +208,8 @@
         </main>
     </div>
 @endif
+
+@include('partials.tim_kontributor')
 
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

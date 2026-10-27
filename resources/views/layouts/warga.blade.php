@@ -65,6 +65,12 @@
             </div>
 
             <div class="flex items-center gap-3">
+                <button type="button" onclick="document.getElementById('contributors_modal').showModal()" title="Tim Kontributor"
+                    class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 text-xs font-bold transition shadow-sm border border-rose-200 cursor-pointer">
+                    <i class="fas fa-users"></i>
+                    <span class="hidden md:inline">Tim Kontributor</span>
+                </button>
+
                 <div class="flex items-center gap-2.5 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-sm">
                     <!-- Menggunakan warna bawaan Tailwind agar tidak hilang -->
                     <div class="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center text-xs font-black uppercase">
@@ -90,6 +96,8 @@
     <main class="flex-1 py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
         @yield('content')
     </main>
+
+    @include('partials.tim_kontributor')
 
     <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
     @stack('scripts')
