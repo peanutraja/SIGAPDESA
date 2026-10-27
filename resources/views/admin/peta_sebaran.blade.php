@@ -343,7 +343,7 @@
         }).setView(defaultCenter, 14);
 
         evacLayerGroup = L.layerGroup().addTo(map);
-        zonaCircleGroup = L.layerGroup().addTo(map);
+        zonaCircleGroup = L.layerGroup().addTo(map); SigapInaRisk.attach(map, { panel: '#filter-panel', rumah: rawRumahData, onZonaUpdated: () => renderMapMarkers() });
     }
 
     function getDisabilitasCount(r) {
@@ -458,6 +458,8 @@
                     badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">⚠️ ZONA MERAH (RAWAN)</span>`;
                 } else if (zona === 'Kuning') {
                     badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">⚠️ ZONA KUNING (WASPADA)</span>`;
+                } else if (zona === 'Belum') {
+                    badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-400 text-white">⏳ BELUM DIANALISIS</span>`;
                 } else {
                     badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">✅ ZONA HIJAU (AMAN)</span>`;
                 }
@@ -548,6 +550,8 @@
             badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">⚠️ ZONA MERAH (RAWAN)</span>`;
         } else if (zona === 'Kuning') {
             badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">⚠️ ZONA KUNING (WASPADA)</span>`;
+        } else if (zona === 'Belum') {
+            badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-400 text-white">⏳ BELUM DIANALISIS</span>`;
         } else {
             badgeZona = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">✅ ZONA HIJAU (AMAN)</span>`;
         }

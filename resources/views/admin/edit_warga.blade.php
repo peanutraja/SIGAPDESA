@@ -265,6 +265,9 @@
                 <textarea name="alamat_lengkap" rows="2" required class="textarea textarea-bordered w-full bg-gray-50 text-xs font-medium" placeholder="Contoh: Jl. Mawar No. 12">{{ old('alamat_lengkap', $warga->alamat_lengkap ?? $rumah->alamat_lengkap ?? '') }}</textarea>
             </div>
 
+            @if(!empty($wilayahRt))
+                @include('admin.partials.wilayah_terkunci')
+            @else
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 <div>
                     <label class="label text-xs font-bold uppercase text-gray-600">Provinsi <span class="text-brandRed">*</span></label>
@@ -336,6 +339,7 @@
                     </select>
                 </div>
             </div>
+            @endif
         </div>
 
         <!-- 6. DATA BANGUNAN RUMAH & PETA KOORDINAT -->
@@ -356,20 +360,18 @@
                 </div>
 
                 <div>
-                    <label class="label text-xs font-bold uppercase text-gray-600">Status Zona Tsunami / Kerentanan</label>
+                    <label class="label text-xs font-bold uppercase text-gray-600">Zona Risiko Bencana (InaRISK BNPB)</label>
                     @php
-                        $zonaArr =$selected_zona ?? (isset($rumah->status_zona_tsunami) ? array_map('trim', explode(',', $rumah->status_zona_tsunami)) : []);
+                        $zonaRumah = !empty($rumah->zona_dianalisis_at) ? $rumah->status_zona_tsunami : null;
+                        $zonaWarna = ['Merah' => 'bg-rose-600', 'Kuning' => 'bg-amber-500', 'Hijau' => 'bg-emerald-600'][$zonaRumah] ?? 'bg-slate-400';
                     @endphp
-                    <div class="flex items-center gap-4 pt-2 flex-wrap">
-                        <label class="cursor-pointer flex items-center gap-2 text-xs font-bold text-gray-700">
-                            <input type="checkbox" name="status_zona_tsunami[]" value="Merah" class="checkbox checkbox-xs checkbox-error" {{ in_array('Merah', $zonaArr) ? 'checked' : '' }}> Zona Merah
-                        </label>
-                        <label class="cursor-pointer flex items-center gap-2 text-xs font-bold text-gray-700">
-                            <input type="checkbox" name="status_zona_tsunami[]" value="Kuning" class="checkbox checkbox-xs checkbox-warning" {{ in_array('Kuning', $zonaArr) ? 'checked' : '' }}> Zona Kuning
-                        </label>
-                        <label class="cursor-pointer flex items-center gap-2 text-xs font-bold text-gray-700">
-                            <input type="checkbox" name="status_zona_tsunami[]" value="Hijau" class="checkbox checkbox-xs checkbox-success" {{ in_array('Hijau', $zonaArr) ? 'checked' : '' }}> Zona Hijau
-                        </label>
+                    <div class="flex items-start gap-2 p-3 rounded-xl bg-sky-50 border border-sky-200 text-[11px] text-sky-800 font-semibold">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold text-white shrink-0 {{ $zonaWarna }}">{{ $zonaRumah ? 'ZONA ' . strtoupper($zonaRumah) : 'BELUM DIANALISIS' }}</span>
+                        <span>
+                            Otomatis dari titik koordinat rumah.
+                            @if(isset($rumah->indeks_bahaya) && $rumah->indeks_bahaya !== null) Indeks bahaya: <b>{{ number_format($rumah->indeks_bahaya, 3) }}</b>. @endif
+                            Jika koordinat diubah, zona dianalisis ulang.
+                        </span>
                     </div>
                 </div>
             </div>

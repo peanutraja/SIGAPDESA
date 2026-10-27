@@ -11,6 +11,7 @@ use App\Http\Controllers\WilayahController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\PengunjungController;
 use App\Http\Controllers\PengunjungDashboardController;
+use App\Http\Controllers\InaRiskController;
 
 
 // Autentikasi Publik
@@ -18,13 +19,13 @@ Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// Rute untuk mengubah status laporan pengunjung oleh RT/RW
-Route::post('/pengunjung/{id}/status', [PengunjungController::class, 'updateStatus'])->name('pengunjung.updateStatus');
-
-
 // Rute Terproteksi Sesi Admin (Pejabat & Pengurus Desa)
 Route::middleware(['cek.session:admin'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Status & hapus laporan pendatang oleh pengurus wilayah
+    Route::post('/pengunjung/{id}/status', [PengunjungController::class, 'updateStatus'])->name('pengunjung.updateStatus');
+    Route::delete('/pengunjung/{id}', [PengunjungController::class, 'destroy'])->name('pengunjung.destroy');
 
     // Manajemen Akun Pengelola oleh GMLS
     Route::get('/kelola-user', [AdminUserController::class, 'index'])->name('admin.user.index');
@@ -52,6 +53,10 @@ Route::middleware(['cek.session:admin'])->group(function () {
     // Peta Spasial & Titik Evakuasi
     Route::get('/peta-sebaran', [EvakuasiController::class, 'index'])->name('peta.sebaran');
     Route::get('/get-evakuasi', [EvakuasiController::class, 'getEvakuasi'])->name('evakuasi.get');
+
+    // Layer bahaya InaRISK BNPB (tingkat bahaya di titik & zona otomatis rumah)
+    Route::get('/inarisk/hazard-at', [InaRiskController::class, 'hazardAt'])->name('inarisk.hazardAt');
+    Route::post('/inarisk/zona/{id}', [InaRiskController::class, 'analisisZona'])->name('inarisk.zona');
     Route::post('/simpan-evakuasi', [EvakuasiController::class, 'simpanEvakuasi'])->name('evakuasi.simpan');
 });
 
@@ -69,10 +74,9 @@ Route::middleware(['cek.session:pengunjung'])->group(function () {
 });
 
 
-// Modul Pendaftaran & Hapus Pengunjung / Pendatang
+// Modul Pendaftaran Pengunjung / Pendatang (publik)
 Route::get('/daftar-pendatang', [PengunjungController::class, 'showRegister'])->name('pengunjung.register');
 Route::post('/daftar-pendatang', [PengunjungController::class, 'register'])->name('pengunjung.store');
-Route::delete('/pengunjung/{id}', [PengunjungController::class, 'destroy'])->name('pengunjung.destroy');
 
 
 // Endpoint JSON Dropdown Cascading Wilayah (AJAX)

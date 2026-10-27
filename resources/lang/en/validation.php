@@ -145,6 +145,12 @@ return [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
+        'tanggal_lahir' => [
+            'before_or_equal' => 'Tanggal lahir tidak boleh melebihi tanggal hari ini.',
+        ],
+        'desa' => ['required' => 'Desa / Kelurahan wajib dipilih.'],
+        'id_rw' => ['required' => 'RW wajib dipilih.'],
+        'id_rt' => ['required' => 'RT wajib dipilih.'],
     ],
 
     /*

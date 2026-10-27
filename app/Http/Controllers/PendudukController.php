@@ -4,26 +4,97 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\WilayahAkses;
 
 class PendudukController extends Controller
 {
+    /**
+     * Input data penduduk hanya untuk RT (wilayahnya dikunci) dan GMLS.
+     * Mengembalikan [akses, wilayahRt] atau string pesan penolakan.
+     */
+    private function aksesInput()
+    {
+        $akses = WilayahAkses::dariSession();
+        if ($akses->isGlobal()) {
+            return [$akses, null];
+        }
+        if (!$akses->isRt()) {
+            return 'Hanya Ketua RT yang dapat menginput data penduduk.';
+        }
+        $wilayahRt = $akses->wilayahRt();
+        if (!$wilayahRt) {
+            return 'Wilayah akun RT Anda belum lengkap (desa/RW/RT). Hubungi GMLS untuk memperbaiki akun.';
+        }
+        return [$akses, $wilayahRt];
+    }
+
+    /** Nomor RT/RW dari CSV ("1", "01", "001") → id di tabel rt/rw. */
+    private function cariIdNomor(string $tabel, $nilai)
+    {
+        $nilai = trim((string) $nilai);
+        if ($nilai === '' || !ctype_digit($nilai)) {
+            return null;
+        }
+        return DB::table($tabel)->where("nomor_{$tabel}", str_pad((string)(int) $nilai, 3, '0', STR_PAD_LEFT))->value("id_{$tabel}");
+    }
+
     public function create()
     {
+        $hak = $this->aksesInput();
+        if (is_string($hak)) {
+            return redirect()->route('dashboard')->with('error', $hak);
+        }
+        [, $wilayahRt] = $hak;
+
         $provinsi = DB::table('provinsi')->orderBy('nama_provinsi', 'asc')->get();
         $kabupaten = DB::table('kabupaten')->orderBy('nama_kabupaten', 'asc')->get();
         $rt = DB::table('rt')->orderBy('nomor_rt', 'asc')->get();
         $rw = DB::table('rw')->orderBy('nomor_rw', 'asc')->get();
 
-        return view('admin.input_data', compact('provinsi', 'kabupaten', 'rt', 'rw'));
+        return view('admin.input_data', compact('provinsi', 'kabupaten', 'rt', 'rw', 'wilayahRt'));
     }
 
     public function store(Request $request)
     {
+        $hak = $this->aksesInput();
+        if (is_string($hak)) {
+            return redirect()->route('dashboard')->with('error', $hak);
+        }
+        [$akses, $wilayahRt] = $hak;
+
+        // Data yang diinput RT selalu masuk ke wilayah RT tersebut
+        if ($wilayahRt) {
+            $request->merge([
+                'provinsi'  => $wilayahRt['id_provinsi'],
+                'kabupaten' => $wilayahRt['id_kabupaten'],
+                'kecamatan' => $wilayahRt['id_kecamatan'],
+                'desa'      => $wilayahRt['id_desa'],
+                'id_rw'     => $wilayahRt['id_rw'],
+                'id_rt'     => $wilayahRt['id_rt'],
+            ]);
+        }
+
+        // NIK / KK yang sudah terdaftar di wilayah lain tidak boleh ditimpa
+        if (!$akses->isGlobal()) {
+            $wargaAda = DB::table('warga')->where('nik', $request->nik)->value('id_warga');
+            if ($wargaAda && !$akses->mencakupWarga($wargaAda)) {
+                return redirect()->back()->withInput()->with('error', 'NIK ini sudah terdaftar di wilayah RT lain. Hubungi RT terkait atau GMLS.');
+            }
+            $rumahKk = DB::table('keluarga as k')->join('rumah as r', 'k.id_rumah', '=', 'r.id_rumah')
+                ->where('k.nomor_kk', $request->nomor_kk)->first(['r.id_kabupaten', 'r.id_kecamatan', 'r.id_desa', 'r.id_rw', 'r.id_rt']);
+            if ($rumahKk && !$akses->mencakup($rumahKk)) {
+                return redirect()->back()->withInput()->with('error', 'Nomor KK ini sudah terdaftar di wilayah RT lain. Hubungi RT terkait atau GMLS.');
+            }
+        }
+
         $request->validate([
+            'desa' => 'required',
+            'id_rw' => 'required',
+            'id_rt' => 'required',
             'nik' => 'required|numeric|digits:16',
             'nama_lengkap' => 'required|string|max:255',
             'tempat_lahir' => 'required',
-            'tanggal_lahir' => 'required|date',
+            'tanggal_lahir' => 'required|date|before_or_equal:today',
             'jenis_kelamin' => 'required',
             'provinsi' => 'required',
             'kabupaten' => 'required',
@@ -34,10 +105,6 @@ class PendudukController extends Controller
 
         try {
             DB::transaction(function () use ($request) {
-                $statusZonaTsunami = $request->status_zona_tsunami 
-                    ? implode(', ', (array) $request->status_zona_tsunami) 
-                    : null;
-
                 $id_kk = null;
                 $id_rumah = null;
 
@@ -72,7 +139,8 @@ class PendudukController extends Controller
                         'id_kabupaten' => $request->kabupaten,
                         'id_provinsi' => $request->provinsi,
                         'jenis_konstruksi' => $request->jenis_konstruksi,
-                        'status_zona_tsunami' => $statusZonaTsunami,
+                        // Zona dihitung otomatis dari InaRISK BNPB (lihat InaRiskService)
+                        'status_zona_tsunami' => null,
                         'latitude' => $lat,
                         'longitude' => $lng,
                         'created_at' => now(),
@@ -86,6 +154,7 @@ class PendudukController extends Controller
                             'alamat_lengkap' => $request->alamat_lengkap,
                             'id_rt' => $request->id_rt ?: DB::raw('id_rt'),
                             'id_rw' => $request->id_rw ?: DB::raw('id_rw'),
+                            'zona_dianalisis_at' => null, // koordinat diperbarui → zona dianalisis ulang
                             'updated_at' => now(),
                         ]);
                     }
@@ -264,26 +333,6 @@ class PendudukController extends Controller
             "Expires"             => "0"
         ];
 
-        $adminSession = session('admin');
-        if (is_array($adminSession)) {
-            $role         = $adminSession['role'] ?? 'gmls';
-            $id_kabupaten = $adminSession['id_kabupaten'] ?? null;
-            $id_kecamatan = $adminSession['id_kecamatan'] ?? null;
-            $id_desa      = $adminSession['id_desa'] ?? null;
-            $id_rw        = $adminSession['id_rw'] ?? $adminSession['rw'] ?? null;
-            $id_rt        = $adminSession['id_rt'] ?? $adminSession['rt'] ?? null;
-        } else if (is_object($adminSession)) {
-            $role         = $adminSession->role ?? 'gmls';
-            $id_kabupaten = $adminSession->id_kabupaten ?? null;
-            $id_kecamatan = $adminSession->id_kecamatan ?? null;
-            $id_desa      = $adminSession->id_desa ?? null;
-            $id_rw        = $adminSession->id_rw ?? $adminSession->rw ?? null;
-            $id_rt        = $adminSession->id_rt ?? $adminSession->rt ?? null;
-        } else {
-            $role = 'gmls';
-            $id_kabupaten = $id_kecamatan = $id_desa = $id_rw = $id_rt = null;
-        }
-
         $query = DB::table('warga as w')
             ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
             ->leftJoin('desa as d', 'w.id_desa', '=', 'd.id_desa')
@@ -302,17 +351,7 @@ class PendudukController extends Controller
                 'r.latitude', 'r.longitude'
             );
 
-        if ($role === 'bupati' && $id_kabupaten) {
-            $query->where('w.id_kabupaten', $id_kabupaten);
-        } elseif ($role === 'camat' && $id_kecamatan) {
-            $query->where('w.id_kecamatan', $id_kecamatan);
-        } elseif (in_array($role, ['kepala_desa', 'kades', 'sekdes']) && $id_desa) {
-            $query->where('w.id_desa', $id_desa);
-        } elseif (in_array($role, ['ketua_rw', 'rw']) && $id_rw) {
-            $query->where('r.id_rw', $id_rw);
-        } elseif (in_array($role, ['ketua_rt', 'rt']) && $id_rt) {
-            $query->where('r.id_rt', $id_rt);
-        }
+        WilayahAkses::dariSession()->batasi($query, 'r');
 
         $warga = $query->orderBy('w.nama_lengkap', 'asc')->get();
 
@@ -379,6 +418,12 @@ class PendudukController extends Controller
      */
     public function importCsv(Request $request)
     {
+        $hak = $this->aksesInput();
+        if (is_string($hak)) {
+            return redirect()->route('dashboard')->with('error', $hak);
+        }
+        [$akses, $wilayahRt] = $hak;
+
         $request->validate([
             'file_csv' => 'required|file|mimes:csv,txt|max:5120',
         ]);
@@ -418,6 +463,7 @@ class PendudukController extends Controller
 
             $addedCount = 0;
             $updatedCount = 0;
+            $skippedCount = 0;
 
             DB::beginTransaction();
 
@@ -468,7 +514,7 @@ class PendudukController extends Controller
                 $rw_val        = $getValue('RW');
 
                 $jenis_konstruksi    = $getValue('JENIS_KONSTRUKSI');
-                $status_zona_tsunami = $getValue('STATUS_ZONA_TSUNAMI');
+                // STATUS_ZONA_TSUNAMI di CSV diabaikan: zona dihitung otomatis dari InaRISK BNPB
                 
                 $latitude  = $getValue('LATITUDE');
                 $longitude = $getValue('LONGITUDE');
@@ -491,13 +537,36 @@ class PendudukController extends Controller
                 }
 
                 // Mapping ID Wilayah
-                $id_provinsi = is_numeric($provinsi_val) ? $provinsi_val : DB::table('provinsi')->where('nama_provinsi', 'LIKE', "%$provinsi_val%")->value('id_provinsi');
-                $id_kabupaten = is_numeric($kabupaten_val) ? $kabupaten_val : DB::table('kabupaten')->where('nama_kabupaten', 'LIKE', "%$kabupaten_val%")->value('id_kabupaten');
-                $id_kecamatan = is_numeric($kecamatan_val) ? $kecamatan_val : DB::table('kecamatan')->where('nama_kecamatan', 'LIKE', "%$kecamatan_val%")->value('id_kecamatan');
-                $id_desa = is_numeric($desa_val) ? $desa_val : DB::table('desa')->where('nama_desa', 'LIKE', "%$desa_val%")->value('id_desa');
-                
-                $id_rt = is_numeric($rt_val) ? $rt_val : DB::table('rt')->where('nomor_rt', 'LIKE', "%$rt_val%")->value('id_rt');
-                $id_rw = is_numeric($rw_val) ? $rw_val : DB::table('rw')->where('nomor_rw', 'LIKE', "%$rw_val%")->value('id_rw');
+                if ($wilayahRt) {
+                    // Akun RT: kolom wilayah di CSV diabaikan, semua baris masuk ke wilayah RT ini
+                    $id_provinsi  = $wilayahRt['id_provinsi'];
+                    $id_kabupaten = $wilayahRt['id_kabupaten'];
+                    $id_kecamatan = $wilayahRt['id_kecamatan'];
+                    $id_desa      = $wilayahRt['id_desa'];
+                    $id_rw        = $wilayahRt['id_rw'];
+                    $id_rt        = $wilayahRt['id_rt'];
+                } else {
+                    // Nama dicari berjenjang (kabupaten di provinsi, kecamatan di kabupaten, desa di kecamatan)
+                    $id_provinsi = is_numeric($provinsi_val) ? $provinsi_val : DB::table('provinsi')->where('nama_provinsi', 'LIKE', "%$provinsi_val%")->value('id_provinsi');
+                    $id_kabupaten = is_numeric($kabupaten_val) ? $kabupaten_val : DB::table('kabupaten')->when($id_provinsi, fn($q) => $q->where('id_provinsi', $id_provinsi))->where('nama_kabupaten', 'LIKE', "%$kabupaten_val%")->value('id_kabupaten');
+                    $id_kecamatan = is_numeric($kecamatan_val) ? $kecamatan_val : DB::table('kecamatan')->when($id_kabupaten, fn($q) => $q->where('id_kabupaten', $id_kabupaten))->where('nama_kecamatan', 'LIKE', "%$kecamatan_val%")->value('id_kecamatan');
+                    $id_desa = is_numeric($desa_val) ? $desa_val : DB::table('desa')->when($id_kecamatan, fn($q) => $q->where('id_kecamatan', $id_kecamatan))->where('nama_desa', 'LIKE', "%$desa_val%")->value('id_desa');
+
+                    // RT/RW di CSV adalah NOMOR ("001"/"1"), bukan id
+                    $id_rt = $this->cariIdNomor('rt', $rt_val);
+                    $id_rw = $this->cariIdNomor('rw', $rw_val);
+                }
+
+                // NIK / KK yang sudah terdaftar di wilayah RT lain tidak ditimpa oleh RT
+                if (!$akses->isGlobal()) {
+                    $wargaAda = DB::table('warga')->where('nik', $nik)->value('id_warga');
+                    $rumahKk = !empty($nomor_kk) ? DB::table('keluarga as k')->join('rumah as r', 'k.id_rumah', '=', 'r.id_rumah')
+                        ->where('k.nomor_kk', $nomor_kk)->first(['r.id_kabupaten', 'r.id_kecamatan', 'r.id_desa', 'r.id_rw', 'r.id_rt']) : null;
+                    if (($wargaAda && !$akses->mencakupWarga($wargaAda)) || ($rumahKk && !$akses->mencakup($rumahKk))) {
+                        $skippedCount++;
+                        continue;
+                    }
+                }
 
                 // 1. Dapatkan / Buat Record Rumah
                 $id_rumah = null;
@@ -521,7 +590,7 @@ class PendudukController extends Controller
                         'id_kabupaten'        => $id_kabupaten,
                         'id_provinsi'         => $id_provinsi,
                         'jenis_konstruksi'    => $jenis_konstruksi,
-                        'status_zona_tsunami' => $status_zona_tsunami,
+                        'status_zona_tsunami' => null,
                         'latitude'            => $latitude,
                         'longitude'           => $longitude,
                         'created_at'          => now(),
@@ -531,6 +600,7 @@ class PendudukController extends Controller
                     DB::table('rumah')->where('id_rumah', $id_rumah)->update([
                         'latitude'  => $latitude,
                         'longitude' => $longitude,
+                        'zona_dianalisis_at' => null,
                         'updated_at' => now(),
                     ]);
                 }
@@ -628,6 +698,9 @@ class PendudukController extends Controller
                 $msg .= ", dan {$updatedCount} data warga diperbarui (karena NIK terdaftar sebelumnya).";
             } else {
                 $msg .= ".";
+            }
+            if ($skippedCount > 0) {
+                $msg .= " {$skippedCount} baris dilewati karena NIK/KK-nya sudah terdaftar di wilayah RT lain.";
             }
 
             return redirect()->back()->with('success', $msg);

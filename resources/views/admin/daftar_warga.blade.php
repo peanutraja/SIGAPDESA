@@ -28,9 +28,9 @@
 @section('content')
 @php
     $adminSess = session('admin') ?? (auth()->check() ? auth()->user() : null);
-    $userRole = 'gmls';
-    if (is_array($adminSess)) $userRole = $adminSess['role'] ?? 'gmls';
-    else if (is_object($adminSess)) $userRole = $adminSess->role ?? 'gmls';
+    $userRole = '';
+    if (is_array($adminSess)) $userRole = $adminSess['role'] ?? '';
+    else if (is_object($adminSess)) $userRole = $adminSess->role ?? '';
 
     $canManageData = in_array($userRole, ['ketua_rt', 'rt', 'gmls', 'admin']);
 @endphp

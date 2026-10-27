@@ -24,7 +24,12 @@ class AuthController extends Controller
                 ->where('password', md5($password))
                 ->first();
 
+            if ($admin && !(int) $admin->status_aktif) {
+                return redirect()->route('login')->with('error', 'Akun Anda sedang dinonaktifkan. Hubungi GMLS.');
+            }
+
             if ($admin) {
+                $request->session()->regenerate();
                 session([
                     'is_login'  => true,
                     'username'  => $admin->username,
@@ -51,6 +56,7 @@ class AuthController extends Controller
                 ->first();
 
             if ($warga) {
+                $request->session()->regenerate();
                 session([
                     'is_login'  => true,
                     'username'  => $warga->nik,
@@ -75,6 +81,7 @@ class AuthController extends Controller
                 }
 
                 // Jika sudah 'Diketahui' (diterima)
+                $request->session()->regenerate();
                 session([
                     'is_login'  => true,
                     'username'  => $pengunjung->nik,

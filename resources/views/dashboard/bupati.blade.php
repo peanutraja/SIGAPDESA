@@ -256,7 +256,7 @@
             defaultCenter = [rawRumahData[0].lat, rawRumahData[0].lng];
         }
         map = L.map('map', { zoomControl: true, layers: [tileLayers.street] }).setView(defaultCenter, 12);
-        evacLayerGroup = L.layerGroup().addTo(map); zonaCircleGroup = L.layerGroup().addTo(map);
+        evacLayerGroup = L.layerGroup().addTo(map); zonaCircleGroup = L.layerGroup().addTo(map); SigapInaRisk.attach(map, { panel: '#filter-panel', rumah: rawRumahData, onZonaUpdated: () => renderMapMarkers() });
         // Timeout agar map ter-render utuh saat tab baru dimuat
         setTimeout(() => { map.invalidateSize(); }, 500); 
     }
@@ -308,7 +308,7 @@
 
                 let bZona = (zona === 'Merah') ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">⚠️ ZONA MERAH</span>` :
                             (zona === 'Kuning') ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">⚠️ ZONA KUNING</span>` :
-                            `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">✅ ZONA HIJAU</span>`;
+                            (zona === 'Belum' ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-400 text-white">⏳ BELUM DIANALISIS</span>` : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">✅ ZONA HIJAU</span>`);
 
                 const marker = L.marker([lat, lng], { icon: L.divIcon({ className: mClass, html: `<span>${r.total_warga || 1}</span>`, iconSize: [28, 28] }) });
                 
@@ -346,7 +346,7 @@
     }
     function showDetailModal(id) {
         const r = rawRumahData.find(item => item.id == id); if (!r) return;
-        let zona = r.zona_bencana || r.zona || 'Hijau', badgeZona = (zona === 'Merah') ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">⚠️ ZONA MERAH</span>` : (zona === 'Kuning') ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">⚠️ ZONA KUNING</span>` : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">✅ ZONA HIJAU</span>`;
+        let zona = r.zona_bencana || r.zona || 'Hijau', badgeZona = (zona === 'Merah') ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">⚠️ ZONA MERAH</span>` : (zona === 'Kuning') ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">⚠️ ZONA KUNING</span>` : (zona === 'Belum' ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-400 text-white">⏳ BELUM DIANALISIS</span>` : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">✅ ZONA HIJAU</span>`);
         $('#modal-title').text(r.nama || 'Detail Rumah'); $('#modal-sub').text((r.alamat || '') + ' (' + (r.rt || '') + ' / ' + (r.rw || '') + ')');
         $('#modal-body').html(`
             <div class="flex justify-between items-center py-1 border-b"><span>Status Bencana:</span> ${badgeZona}</div>

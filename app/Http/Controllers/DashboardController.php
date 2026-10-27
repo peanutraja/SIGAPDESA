@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\PetaRumahService;
+use App\Services\WilayahAkses;
 
 class DashboardController extends Controller
 {
@@ -21,43 +23,33 @@ class DashboardController extends Controller
 
         // 2. Ekstraksi Role & ID Wilayah secara Fleksibel
         if (is_array($adminSession)) {
-            $role         = $adminSession['role'] ?? 'gmls';
+            $role         = $adminSession['role'] ?? '';
             $id_kabupaten = $adminSession['id_kabupaten'] ?? null;
             $id_kecamatan = $adminSession['id_kecamatan'] ?? null;
             $id_desa      = $adminSession['id_desa'] ?? null;
             $id_rw        = $adminSession['id_rw'] ?? $adminSession['rw'] ?? null;
             $id_rt        = $adminSession['id_rt'] ?? $adminSession['rt'] ?? null;
         } else if (is_object($adminSession)) {
-            $role         = $adminSession->role ?? 'gmls';
+            $role         = $adminSession->role ?? '';
             $id_kabupaten = $adminSession->id_kabupaten ?? null;
             $id_kecamatan = $adminSession->id_kecamatan ?? null;
             $id_desa      = $adminSession->id_desa ?? null;
             $id_rw        = $adminSession->id_rw ?? $adminSession->rw ?? null;
             $id_rt        = $adminSession->id_rt ?? $adminSession->rt ?? null;
         } else {
-            $role = 'gmls';
+            $role = '';
             $id_kabupaten = $id_kecamatan = $id_desa = $id_rw = $id_rt = null;
         }
 
         $admin = $adminSession;
+        $akses = WilayahAkses::dariSession();
 
         // Ambil Data Rumah + Kelompok Rentan Terkunci Wilayah Pejabat
-        $rumahData = $this->getRumahDataMap($role, $id_kabupaten, $id_kecamatan, $id_desa, $id_rw, $id_rt);
+        $rumahData = app(PetaRumahService::class)->ambil($akses);
 
         // DATA LAPORAN PENDATANG (Difilter sesuai wilayah admin yang login)
-        $qLaporan = DB::table('pengunjung')->where('status_laporan', 'Menunggu')->orderBy('created_at', 'desc');
-        if ($role === 'camat') {
-            $qLaporan->where('id_kecamatan', $id_kecamatan);
-        } elseif (in_array($role, ['kepala_desa', 'kades', 'sekdes', 'pemerintah_desa'])) {
-            $qLaporan->where('id_desa', $id_desa);
-        } elseif (in_array($role, ['ketua_rw', 'rw'])) {
-            $qLaporan->where('id_desa', $id_desa)->where('id_rw', $id_rw);
-        } elseif (in_array($role, ['ketua_rt', 'rt'])) {
-            $qLaporan->where('id_desa', $id_desa)->where('id_rw', $id_rw)->where('id_rt', $id_rt);
-        } elseif ($role === 'bupati') {
-            $qLaporan->where('id_kabupaten', $id_kabupaten);
-        }
-        $laporan_pendatang = $qLaporan->get();
+        $qLaporan = DB::table('pengunjung as pj')->where('pj.status_laporan', 'Menunggu')->orderBy('pj.created_at', 'desc')->select('pj.*');
+        $laporan_pendatang = $akses->batasi($qLaporan, 'pj')->get();
 
         // ----------------------------------------------------
         // 1. DASHBOARD GMLS / SUPER ADMIN (Seluruh Wilayah)
@@ -306,14 +298,11 @@ class DashboardController extends Controller
                 ->where('a.id_admin', $id_admin_curr)
                 ->first();
 
-            $qWargaRT = DB::table('warga as w')
-                ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
-                ->when(!empty($id_rt), function($q) use ($id_rt) {
-                    return $q->where('r.id_rt', $id_rt);
-                })
-                ->when(empty($id_rt) && !empty($id_desa), function($q) use ($id_desa) {
-                    return $q->where('w.id_desa', $id_desa);
-                });
+            // Wilayah RT = desa + RW + RT (nomor RT sama bisa ada di banyak desa)
+            $qWargaRT = $akses->batasi(
+                DB::table('warga as w')->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah'),
+                'r'
+            );
 
             $total_warga = (clone $qWargaRT)->count();
 
@@ -376,13 +365,10 @@ class DashboardController extends Controller
             )->first();
 
             // NOTIFIKASI PENGAJUAN PERUBAHAN DATA DARI WARGA (status pending)
-            $pengajuan_pending = DB::table('pengajuan_update as p')
+            $pengajuan_pending = $akses->batasi(DB::table('pengajuan_update as p')
                 ->join('warga as w', 'p.id_warga', '=', 'w.id_warga')
                 ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
-                ->where('p.status', 'pending')
-                ->when(!empty($id_rt), fn($q) => $q->where('r.id_rt', $id_rt))
-                ->when(!empty($id_rw), fn($q) => $q->where('r.id_rw', $id_rw))
-                ->when(!empty($id_desa), fn($q) => $q->where('w.id_desa', $id_desa))
+                ->where('p.status', 'pending'), 'r')
                 ->select('p.id_pengajuan', 'p.kategori_perubahan', 'p.alasan_perubahan', 'p.created_at', 'w.nik', 'w.nama_lengkap')
                 ->orderBy('p.created_at', 'desc')
                 ->get();
@@ -396,155 +382,5 @@ class DashboardController extends Controller
         }
 
         return redirect()->route('login');
-    }
-
-    private function getRumahDataMap($role, $id_kabupaten = null, $id_kecamatan = null, $id_desa = null, $id_rw = null, $id_rt = null)
-    {
-        $whereMap = [
-            "r.latitude IS NOT NULL",
-            "r.longitude IS NOT NULL",
-            "TRIM(r.latitude) <> ''",
-            "TRIM(r.longitude) <> ''"
-        ];
-
-        if ($role === 'bupati' && !empty($id_kabupaten)) {
-            $whereMap[] = "r.id_kabupaten = " . (int)$id_kabupaten;
-        } elseif ($role === 'camat' && !empty($id_kecamatan)) {
-            $whereMap[] = "r.id_kecamatan = " . (int)$id_kecamatan;
-        } elseif (in_array($role, ['kepala_desa', 'kades', 'sekdes']) && !empty($id_desa)) {
-            $whereMap[] = "r.id_desa = " . (int)$id_desa;
-        } elseif (in_array($role, ['ketua_rw', 'rw']) && !empty($id_rw)) {
-            $whereMap[] = "r.id_rw = " . (int)$id_rw;
-            if (!empty($id_desa)) {
-                $whereMap[] = "r.id_desa = " . (int)$id_desa;
-            }
-        } elseif (in_array($role, ['ketua_rt', 'rt']) && !empty($id_rt)) {
-            $whereMap[] = "r.id_rt = " . (int)$id_rt;
-        }
-
-        $whereSql = implode(" AND ", $whereMap);
-
-        try {
-            $sql = "
-                SELECT
-                    r.id_rumah,
-                    r.alamat_lengkap,
-                    r.latitude,
-                    r.longitude,
-                    COALESCE(r.status_zona_tsunami, 'Hijau') AS status_zona,
-                    COALESCE(rt.nomor_rt, '') AS nomor_rt,
-                    COALESCE(rw.nomor_rw, '') AS nomor_rw,
-                    COALESCE(d.nama_desa, '') AS nama_desa,
-                    COUNT(DISTINCT w.id_warga) AS jumlah_warga,
-                    MIN(w.nama_lengkap) AS nama_warga,
-                    
-                    COUNT(DISTINCT CASE
-                        WHEN w.id_warga IS NOT NULL 
-                          AND w.tanggal_lahir IS NOT NULL 
-                          AND TRIM(CAST(w.tanggal_lahir AS CHAR)) <> ''
-                          AND TRIM(CAST(w.tanggal_lahir AS CHAR)) <> '0000-00-00'
-                          AND (
-                            CASE 
-                              WHEN CAST(w.tanggal_lahir AS CHAR) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN TIMESTAMPDIFF(YEAR, STR_TO_DATE(w.tanggal_lahir, '%Y-%m-%d'), CURDATE())
-                              WHEN CAST(w.tanggal_lahir AS CHAR) REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}' THEN TIMESTAMPDIFF(YEAR, STR_TO_DATE(w.tanggal_lahir, '%d-%m-%Y'), CURDATE())
-                              WHEN CAST(w.tanggal_lahir AS CHAR) REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}' THEN TIMESTAMPDIFF(YEAR, STR_TO_DATE(w.tanggal_lahir, '%d/%m/%Y'), CURDATE())
-                              ELSE TIMESTAMPDIFF(YEAR, w.tanggal_lahir, CURDATE())
-                            END
-                          ) >= 60
-                        THEN w.id_warga
-                    END) AS jumlah_lansia,
-
-                    COUNT(DISTINCT CASE
-                        WHEN w.id_warga IS NOT NULL 
-                          AND w.tanggal_lahir IS NOT NULL 
-                          AND TRIM(CAST(w.tanggal_lahir AS CHAR)) <> ''
-                          AND TRIM(CAST(w.tanggal_lahir AS CHAR)) <> '0000-00-00'
-                          AND (
-                            CASE 
-                              WHEN CAST(w.tanggal_lahir AS CHAR) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN TIMESTAMPDIFF(YEAR, STR_TO_DATE(w.tanggal_lahir, '%Y-%m-%d'), CURDATE())
-                              WHEN CAST(w.tanggal_lahir AS CHAR) REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}' THEN TIMESTAMPDIFF(YEAR, STR_TO_DATE(w.tanggal_lahir, '%d-%m-%Y'), CURDATE())
-                              WHEN CAST(w.tanggal_lahir AS CHAR) REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}' THEN TIMESTAMPDIFF(YEAR, STR_TO_DATE(w.tanggal_lahir, '%d/%m/%Y'), CURDATE())
-                              ELSE TIMESTAMPDIFF(YEAR, w.tanggal_lahir, CURDATE())
-                            END
-                          ) BETWEEN 0 AND 5
-                        THEN w.id_warga
-                    END) AS jumlah_balita,
-
-                    COUNT(DISTINCT CASE
-                        WHEN w.id_warga IS NOT NULL AND (
-                          w.status_kehamilan = 1 
-                          OR w.status_kehamilan = '1' 
-                          OR LOWER(CAST(w.status_kehamilan AS CHAR)) = 'on' 
-                          OR LOWER(CAST(w.status_kehamilan AS CHAR)) = 'ya'
-                        )
-                        THEN w.id_warga
-                    END) AS jumlah_ibu_hamil,
-
-                    COUNT(DISTINCT CASE
-                        WHEN w.id_warga IS NOT NULL
-                          AND w.kategori_disabilitas IS NOT NULL
-                          AND TRIM(CAST(w.kategori_disabilitas AS CHAR)) <> ''
-                          AND LOWER(TRIM(CAST(w.kategori_disabilitas AS CHAR))) <> 'tidak ada'
-                          AND LOWER(TRIM(CAST(w.kategori_disabilitas AS CHAR))) <> '0'
-                        THEN w.id_warga
-                    END) AS jumlah_disabilitas
-
-                FROM rumah r
-                LEFT JOIN rt ON r.id_rt = rt.id_rt
-                LEFT JOIN rw ON r.id_rw = rw.id_rw
-                LEFT JOIN desa d ON r.id_desa = d.id_desa
-                LEFT JOIN keluarga k ON k.id_rumah = r.id_rumah
-                LEFT JOIN warga w ON (w.id_rumah = r.id_rumah OR (w.id_rumah IS NULL AND w.id_kk = k.id_kk))
-                WHERE {$whereSql}
-                GROUP BY r.id_rumah, r.alamat_lengkap, r.latitude, r.longitude, r.status_zona_tsunami, rt.nomor_rt, rw.nomor_rw, d.nama_desa
-                ORDER BY rt.nomor_rt ASC, r.id_rumah ASC
-            ";
-
-            $result = DB::select($sql);
-            $rumahData = [];
-
-            foreach ($result as $row) {
-                $rawZona = strtolower(trim($row->status_zona ?? ''));
-                if (in_array($rawZona, ['merah', 'rawan', 'tinggi', '1', 'ya', 'tsunami', 'zona merah'])) {
-                    $zonaBencana = 'Merah';
-                } elseif (in_array($rawZona, ['kuning', 'waspada', 'sedang', '2', 'zona kuning'])) {
-                    $zonaBencana = 'Kuning';
-                } else {
-                    $zonaBencana = 'Hijau';
-                }
-
-                $namaRumah = !empty($row->nama_warga) ? "Kel. " . $row->nama_warga : "Rumah " . $row->id_rumah;
-                $strRt = !empty($row->nomor_rt) ? "RT " . str_pad($row->nomor_rt, 3, "0", STR_PAD_LEFT) : "-";
-                $strRw = !empty($row->nomor_rw) ? "RW " . str_pad($row->nomor_rw, 3, "0", STR_PAD_LEFT) : "";
-
-                $rumahData[] = [
-                    "id" => (int)$row->id_rumah,
-                    "nama" => $namaRumah,
-                    "alamat" => $row->alamat_lengkap ?? '-',
-                    "desa" => $row->nama_desa ?? '-',
-                    "rt" => $strRt,
-                    "rw" => $strRw,
-                    "nomor_rw" => $row->nomor_rw ?? '',
-                    "lat" => (float)$row->latitude,
-                    "lng" => (float)$row->longitude,
-                    "zona_bencana" => $zonaBencana,
-                    "total_warga" => (int)$row->jumlah_warga,
-                    "total_lansia" => (int)$row->jumlah_lansia,
-                    "total_balita" => (int)$row->jumlah_balita,
-                    "total_ibu_hamil" => (int)$row->jumlah_ibu_hamil,
-                    "total_disabilitas" => (int)$row->jumlah_disabilitas,
-                    "anggota" => (int)$row->jumlah_warga,
-                    "detail_warga" => [
-                        "lansia" => (int)$row->jumlah_lansia,
-                        "balita" => (int)$row->jumlah_balita,
-                        "ibu_hamil" => (int)$row->jumlah_ibu_hamil,
-                        "disabilitas" => (int)$row->jumlah_disabilitas
-                    ]
-                ];
-            }
-            return $rumahData;
-        } catch (\Throwable $e) {
-            return [];
-        }
     }
 }

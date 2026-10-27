@@ -43,7 +43,7 @@ class WargaDashboardController extends Controller
         $request->validate([
             'nama_lengkap' => 'required|string|max:255',
             'tempat_lahir' => 'required|string|max:255',
-            'tanggal_lahir' => 'required|date',
+            'tanggal_lahir' => 'required|date|before_or_equal:today',
             'jenis_kelamin' => 'required|in:L,P',
             'golongan_darah' => 'required|string',
             'agama' => 'nullable|string',

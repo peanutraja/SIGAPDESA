@@ -291,6 +291,9 @@
                 <textarea name="alamat_lengkap" rows="2" required class="w-full bg-white text-slate-900 border border-slate-300 rounded-xl p-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500" placeholder="Contoh: Jl. Mawar No. 12">{{ old('alamat_lengkap') }}</textarea>
             </div>
 
+            @if(!empty($wilayahRt))
+                @include('admin.partials.wilayah_terkunci')
+            @else
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Provinsi <span class="text-rose-600">*</span></label>
@@ -345,6 +348,7 @@
                     </select>
                 </div>
             </div>
+            @endif
         </div>
 
         <!-- 6. DATA BANGUNAN RUMAH & PETA KOORDINAT -->
@@ -366,17 +370,10 @@
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Status Zona Tsunami / Kerentanan</label>
-                    <div class="flex items-center gap-4 pt-2 flex-wrap">
-                        <label class="cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-800">
-                            <input type="checkbox" name="status_zona_tsunami[]" value="Merah" class="w-4 h-4 text-rose-600 rounded border-slate-300"> Zona Merah
-                        </label>
-                        <label class="cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-800">
-                            <input type="checkbox" name="status_zona_tsunami[]" value="Kuning" class="w-4 h-4 text-amber-500 rounded border-slate-300"> Zona Kuning
-                        </label>
-                        <label class="cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-800">
-                            <input type="checkbox" name="status_zona_tsunami[]" value="Hijau" class="w-4 h-4 text-emerald-600 rounded border-slate-300"> Zona Hijau
-                        </label>
+                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Zona Risiko Bencana</label>
+                    <div class="flex items-start gap-2 p-3 rounded-xl bg-sky-50 border border-sky-200 text-[11px] text-sky-800 font-semibold">
+                        <i class="fas fa-satellite-dish mt-0.5"></i>
+                        <span>Ditentukan otomatis dari data <b>InaRISK BNPB</b> berdasarkan titik koordinat rumah — tidak perlu diisi manual. Zona muncul di peta setelah dianalisis.</span>
                     </div>
                 </div>
             </div>

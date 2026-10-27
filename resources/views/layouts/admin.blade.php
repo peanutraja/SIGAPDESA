@@ -11,6 +11,23 @@
     <!-- DaisyUI v4 (kompatibel dengan Tailwind v3 dari Play CDN) -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Warna brand dipakai di banyak halaman (bg-brandRed, text-brandDark, dst.); tanpa ini teksnya jadi tak terlihat
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brandRed: '#dc2626',
+                        brandDarkRed: '#b91c1c',
+                        brandDark: '#0f172a',
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
 
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="{{ asset('vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet">
@@ -25,7 +42,7 @@
 
 @php
     $adminSession = session('admin');
-    $userRole = strtolower($adminSession['role'] ?? 'gmls');
+    $userRole = strtolower($adminSession['role'] ?? '');
     $userName = $adminSession['nama_pengguna'] ?? $adminSession['nama_lengkap'] ?? $adminSession['username'] ?? 'Pengguna';
     $canCreateAkun = (int)($adminSession['can_create_akun'] ?? 0);
 
@@ -45,18 +62,13 @@
     $canVerifyPengajuan = in_array($userRole, ['ketua_rt', 'rt', 'gmls', 'admin']);
     $pengajuanPendingCount = 0;
     if ($canVerifyPengajuan) {
-        $idRtSes   = $adminSession['id_rt'] ?? $adminSession['rt'] ?? null;
-        $idRwSes   = $adminSession['id_rw'] ?? $adminSession['rw'] ?? null;
-        $idDesaSes = $adminSession['id_desa'] ?? null;
-        $isRtRole  = in_array($userRole, ['ketua_rt', 'rt']);
-        $pengajuanPendingCount = \Illuminate\Support\Facades\DB::table('pengajuan_update as p')
-            ->join('warga as w', 'p.id_warga', '=', 'w.id_warga')
-            ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
-            ->where('p.status', 'pending')
-            ->when($isRtRole && !empty($idRtSes), fn($q) => $q->where('r.id_rt', $idRtSes))
-            ->when($isRtRole && !empty($idRwSes), fn($q) => $q->where('r.id_rw', $idRwSes))
-            ->when($isRtRole && !empty($idDesaSes), fn($q) => $q->where('w.id_desa', $idDesaSes))
-            ->count();
+        $pengajuanPendingCount = \App\Services\WilayahAkses::dariSession()->batasi(
+            \Illuminate\Support\Facades\DB::table('pengajuan_update as p')
+                ->join('warga as w', 'p.id_warga', '=', 'w.id_warga')
+                ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
+                ->where('p.status', 'pending'),
+            'r'
+        )->count();
     }
 @endphp
 
@@ -190,6 +202,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+    window.SIGAP_INARISK_CONFIG = {
+        hazardAtUrl: "{{ route('inarisk.hazardAt') }}",
+        zonaUrl: "{{ route('inarisk.zona', '__ID__') }}",
+        csrf: "{{ csrf_token() }}"
+    };
+</script>
+<script src="{{ asset('js/sigap-inarisk.js') }}"></script>
 @stack('scripts')
 </body>
 </html>

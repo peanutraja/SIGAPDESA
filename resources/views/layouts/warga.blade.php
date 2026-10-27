@@ -12,6 +12,23 @@
     <!-- DaisyUI v4 (kompatibel dengan Tailwind v3 dari Play CDN) -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Warna brand dipakai di banyak halaman (bg-brandRed, text-brandDark, dst.); tanpa ini teksnya jadi tak terlihat
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brandRed: '#dc2626',
+                        brandDarkRed: '#b91c1c',
+                        brandDark: '#0f172a',
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
     <link href="{{ asset('vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet">
 
     <style>

@@ -4,47 +4,24 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\WilayahAkses;
 
 class WargaController extends Controller
 {
     /**
-     * Helper privat untuk mengambil data session & wilayah admin secara aman
+     * Hanya GMLS atau RT pemilik wilayah yang boleh mengubah/menghapus data warga ini.
+     * Mengembalikan pesan penolakan, atau null bila diizinkan.
      */
-    private function getAdminSessionData()
+    private function cekHakKelolaWarga($idWarga): ?string
     {
-        $adminSession = session('admin');
-        if (!$adminSession && auth()->check()) {
-            $adminSession = auth()->user();
+        $akses = WilayahAkses::dariSession();
+        if (!$akses->isGlobal() && !$akses->isRt()) {
+            return 'Hanya Ketua RT yang dapat mengelola data penduduk.';
         }
-
-        if (is_array($adminSession)) {
-            return [
-                'role'         => $adminSession['role'] ?? 'gmls',
-                'id_kabupaten' => $adminSession['id_kabupaten'] ?? null,
-                'id_kecamatan' => $adminSession['id_kecamatan'] ?? null,
-                'id_desa'      => $adminSession['id_desa'] ?? null,
-                'id_rw'        => $adminSession['id_rw'] ?? $adminSession['rw'] ?? null,
-                'id_rt'        => $adminSession['id_rt'] ?? $adminSession['rt'] ?? null,
-            ];
-        } else if (is_object($adminSession)) {
-            return [
-                'role'         => $adminSession->role ?? 'gmls',
-                'id_kabupaten' => $adminSession->id_kabupaten ?? null,
-                'id_kecamatan' => $adminSession->id_kecamatan ?? null,
-                'id_desa'      => $adminSession->id_desa ?? null,
-                'id_rw'        => $adminSession->id_rw ?? $adminSession->rw ?? null,
-                'id_rt'        => $adminSession->id_rt ?? $adminSession->rt ?? null,
-            ];
+        if (!$akses->mencakupWarga($idWarga)) {
+            return 'Data warga tidak ditemukan atau berada di luar wilayah Anda.';
         }
-
-        return [
-            'role' => 'gmls',
-            'id_kabupaten' => null,
-            'id_kecamatan' => null,
-            'id_desa' => null,
-            'id_rw' => null,
-            'id_rt' => null,
-        ];
+        return null;
     }
 
     /**
@@ -52,14 +29,6 @@ class WargaController extends Controller
      */
     public function daftarWarga()
     {
-        $sessionData  = $this->getAdminSessionData();
-        $role         = $sessionData['role'];
-        $id_kabupaten = $sessionData['id_kabupaten'];
-        $id_kecamatan = $sessionData['id_kecamatan'];
-        $id_desa      = $sessionData['id_desa'];
-        $id_rw        = $sessionData['id_rw'];
-        $id_rt        = $sessionData['id_rt'];
-
         // 1. QUERY UTAMA WARGA TETAP
         $query = DB::table('warga as w')
             ->leftJoin('rumah as r', 'w.id_rumah', '=', 'r.id_rumah')
@@ -92,47 +61,10 @@ class WargaController extends Controller
                 'rt.nomor_rt', 'rw.nomor_rw'
             );
 
-        // =========================================================================
-        // PEMBATASAN WILAYAH BERDASARKAN ROLE PEJABAT SANGAT KETAT
-        // =========================================================================
-        if ($role === 'bupati') {
-            if (!empty($id_kabupaten)) {
-                $query->where('w.id_kabupaten', $id_kabupaten);
-                $queryPendatang->where('pj.id_kabupaten', $id_kabupaten);
-            }
-        } elseif ($role === 'camat') {
-            if (!empty($id_kecamatan)) {
-                $query->where('w.id_kecamatan', $id_kecamatan);
-                $queryPendatang->where('pj.id_kecamatan', $id_kecamatan);
-            }
-        } elseif (in_array($role, ['kepala_desa', 'kades', 'sekdes'])) {
-            if (!empty($id_desa)) {
-                $query->where('w.id_desa', $id_desa);
-                $queryPendatang->where('pj.id_desa', $id_desa);
-            }
-        } elseif (in_array($role, ['ketua_rw', 'rw'])) {
-            if (!empty($id_rw)) {
-                $query->where('r.id_rw', $id_rw);
-                $queryPendatang->where('pj.id_rw', $id_rw);
-            }
-            if (!empty($id_desa)) {
-                $query->where('w.id_desa', $id_desa);
-                $queryPendatang->where('pj.id_desa', $id_desa);
-            }
-        } elseif (in_array($role, ['ketua_rt', 'rt'])) {
-            if (!empty($id_rt)) {
-                $query->where('r.id_rt', $id_rt);
-                $queryPendatang->where('pj.id_rt', $id_rt);
-            }
-            if (!empty($id_rw)) {
-                $query->where('r.id_rw', $id_rw);
-                $queryPendatang->where('pj.id_rw', $id_rw);
-            }
-            if (!empty($id_desa)) {
-                $query->where('w.id_desa', $id_desa);
-                $queryPendatang->where('pj.id_desa', $id_desa);
-            }
-        }
+        // Pembatasan wilayah sesuai akun (RT = desa + RW + RT, RW = desa + RW, dst.)
+        $akses = WilayahAkses::dariSession();
+        $akses->batasi($query, 'r');
+        $akses->batasi($queryPendatang, 'pj');
 
         $warga = $query->orderBy('w.nama_lengkap', 'asc')->get();
         $pendatang = $queryPendatang->orderBy('pj.nama_lengkap', 'asc')->get();
@@ -148,13 +80,10 @@ class WargaController extends Controller
      */
     public function indexPengajuan()
     {
-        $sessionData  = $this->getAdminSessionData();
-        $role         = $sessionData['role'];
-        $id_kabupaten = $sessionData['id_kabupaten'];
-        $id_kecamatan = $sessionData['id_kecamatan'];
-        $id_desa      = $sessionData['id_desa'];
-        $id_rw        = $sessionData['id_rw'];
-        $id_rt        = $sessionData['id_rt'];
+        $akses = WilayahAkses::dariSession();
+        if (!$akses->isGlobal() && !$akses->isRt()) {
+            return redirect()->route('dashboard')->with('error', 'Verifikasi data hanya untuk Ketua RT.');
+        }
 
         $query = DB::table('pengajuan_update as p')
             ->join('warga as w', 'p.id_warga', '=', 'w.id_warga')
@@ -169,20 +98,7 @@ class WargaController extends Controller
                 'rw.nomor_rw'
             );
 
-        if ($role === 'bupati' && !empty($id_kabupaten)) {
-            $query->where('w.id_kabupaten', $id_kabupaten);
-        } elseif ($role === 'camat' && !empty($id_kecamatan)) {
-            $query->where('w.id_kecamatan', $id_kecamatan);
-        } elseif (in_array($role, ['kepala_desa', 'kades', 'sekdes']) && !empty($id_desa)) {
-            $query->where('w.id_desa', $id_desa);
-        } elseif (in_array($role, ['ketua_rw', 'rw'])) {
-            if (!empty($id_rw)) $query->where('r.id_rw', $id_rw);
-            if (!empty($id_desa)) $query->where('w.id_desa', $id_desa);
-        } elseif (in_array($role, ['ketua_rt', 'rt'])) {
-            if (!empty($id_rt)) $query->where('r.id_rt', $id_rt);
-            if (!empty($id_rw)) $query->where('r.id_rw', $id_rw);
-            if (!empty($id_desa)) $query->where('w.id_desa', $id_desa);
-        }
+        $akses->batasi($query, 'r');
 
         $pengajuan = $query->orderBy('p.created_at', 'desc')->get();
         $viewPath = view()->exists('admin.verifikasi_pengajuan') ? 'admin.verifikasi_pengajuan' : 'verifikasi_pengajuan';
@@ -195,6 +111,11 @@ class WargaController extends Controller
      */
     public function setujuiPengajuan(Request $request, $id)
     {
+        $idWarga = DB::table('pengajuan_update')->where('id_pengajuan', $id)->value('id_warga');
+        if ($tolak = $this->cekHakKelolaWarga($idWarga)) {
+            return redirect()->back()->with('error', $tolak);
+        }
+
         try {
             DB::transaction(function () use ($id, $request) {
                 $item = DB::table('pengajuan_update')->where('id_pengajuan', $id)->first();
@@ -226,6 +147,11 @@ class WargaController extends Controller
      */
     public function tolakPengajuan(Request $request, $id)
     {
+        $idWarga = DB::table('pengajuan_update')->where('id_pengajuan', $id)->value('id_warga');
+        if ($tolak = $this->cekHakKelolaWarga($idWarga)) {
+            return redirect()->back()->with('error', $tolak);
+        }
+
         try {
             $item = DB::table('pengajuan_update')->where('id_pengajuan', $id)->first();
             if (!$item || $item->status !== 'pending') {
@@ -249,6 +175,10 @@ class WargaController extends Controller
      */
     public function edit($id)
     {
+        if ($tolak = $this->cekHakKelolaWarga($id)) {
+            return redirect()->route('warga.index')->with('error', $tolak);
+        }
+
         $warga = DB::table('warga as w')
             ->leftJoin('keluarga as k', 'w.id_kk', '=', 'k.id_kk')
             ->leftJoin('kabupaten as kb', 'w.id_kabupaten', '=', 'kb.id_kabupaten')
@@ -280,14 +210,15 @@ class WargaController extends Controller
             $desa_options = DB::table('desa')->where('id_kecamatan', $warga->id_kecamatan)->orderBy('nama_desa', 'asc')->get();
         }
         $rumah = !empty($warga->id_rumah) ? DB::table('rumah')->where('id_rumah', $warga->id_rumah)->first() : null;
-        $selected_zona = ($rumah && !empty($rumah->status_zona_tsunami)) ? array_map('trim', explode(',', $rumah->status_zona_tsunami)) : [];
+        $akses = WilayahAkses::dariSession();
+        $wilayahRt = $akses->isRt() ? $akses->wilayahRt() : null;
 
         $viewPath = view()->exists('admin.edit_warga') ? 'admin.edit_warga' : 'edit_warga';
 
         return view($viewPath, compact(
             'warga', 'provinsi', 'kota', 'rt', 'rw',
             'kabupaten_options', 'kecamatan_options', 'desa_options',
-            'rumah', 'selected_zona'
+            'rumah', 'wilayahRt'
         ));
     }
 
@@ -296,11 +227,32 @@ class WargaController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if ($tolak = $this->cekHakKelolaWarga($id)) {
+            return redirect()->route('warga.index')->with('error', $tolak);
+        }
+
+        // RT tidak bisa memindahkan warga ke wilayah lain: wilayah dikunci ke wilayah akunnya
+        $akses = WilayahAkses::dariSession();
+        if ($akses->isRt()) {
+            $wilayahRt = $akses->wilayahRt();
+            if (!$wilayahRt) {
+                return redirect()->back()->withInput()->with('error', 'Wilayah akun RT Anda belum lengkap. Hubungi GMLS.');
+            }
+            $request->merge([
+                'provinsi'  => $wilayahRt['id_provinsi'],
+                'kabupaten' => $wilayahRt['id_kabupaten'],
+                'kecamatan' => $wilayahRt['id_kecamatan'],
+                'desa'      => $wilayahRt['id_desa'],
+                'id_rw'     => $wilayahRt['id_rw'],
+                'id_rt'     => $wilayahRt['id_rt'],
+            ]);
+        }
+
         $request->validate([
             'nik' => 'required|numeric|digits:16',
             'nama_lengkap' => 'required|string|max:255',
             'tempat_lahir' => 'required',
-            'tanggal_lahir' => 'required|date',
+            'tanggal_lahir' => 'required|date|before_or_equal:today',
             'jenis_kelamin' => 'required|in:L,P',
             'nomor_kk' => 'required|numeric|digits:16',
         ]);
@@ -312,22 +264,26 @@ class WargaController extends Controller
 
                 $id_rumah = $oldWarga->id_rumah;
                 $id_kk_lama = $oldWarga->id_kk;
-                $statusZonaTsunami = $request->has('status_zona_tsunami') ? implode(', ', (array) $request->status_zona_tsunami) : null;
-
                 if ($id_rumah) {
-                    DB::table('rumah')->where('id_rumah', $id_rumah)->update([
+                    // Zona dihitung otomatis dari InaRISK BNPB; dianalisis ulang bila koordinat berubah
+                    $rumahLama = DB::table('rumah')->where('id_rumah', $id_rumah)->first(['latitude', 'longitude']);
+                    $koordinatBerubah = !$rumahLama
+                        || (float) $rumahLama->latitude !== (float) $request->latitude
+                        || (float) $rumahLama->longitude !== (float) $request->longitude;
+
+                    DB::table('rumah')->where('id_rumah', $id_rumah)->update(array_merge([
                         'alamat_lengkap' => $request->alamat_lengkap, 'id_rt' => $request->id_rt, 'id_rw' => $request->id_rw,
                         'id_desa' => $request->desa, 'id_kecamatan' => $request->kecamatan, 'id_kabupaten' => $request->kabupaten,
                         'id_provinsi' => $request->provinsi, 'jenis_konstruksi' => $request->jenis_konstruksi,
-                        'status_zona_tsunami' => $statusZonaTsunami, 'latitude' => $request->latitude, 'longitude' => $request->longitude,
+                        'latitude' => $request->latitude, 'longitude' => $request->longitude,
                         'updated_at' => now(),
-                    ]);
+                    ], $koordinatBerubah ? ['zona_dianalisis_at' => null] : []));
                 } else {
                     $id_rumah = DB::table('rumah')->insertGetId([
                         'alamat_lengkap' => $request->alamat_lengkap, 'id_rt' => $request->id_rt, 'id_rw' => $request->id_rw,
                         'id_desa' => $request->desa, 'id_kecamatan' => $request->kecamatan, 'id_kabupaten' => $request->kabupaten,
                         'id_provinsi' => $request->provinsi, 'jenis_konstruksi' => $request->jenis_konstruksi,
-                        'status_zona_tsunami' => $statusZonaTsunami, 'latitude' => $request->latitude, 'longitude' => $request->longitude,
+                        'status_zona_tsunami' => null, 'latitude' => $request->latitude, 'longitude' => $request->longitude,
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
                 }
@@ -379,6 +335,10 @@ class WargaController extends Controller
      */
     public function destroy($id)
     {
+        if ($tolak = $this->cekHakKelolaWarga($id)) {
+            return redirect()->back()->with('error', $tolak);
+        }
+
         try {
             DB::table('warga')->where('id_warga', $id)->delete();
             return redirect()->back()->with('success', 'Data warga berhasil dihapus!');

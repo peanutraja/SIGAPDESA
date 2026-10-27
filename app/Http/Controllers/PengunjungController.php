@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\WilayahAkses;
 
 class PengunjungController extends Controller
 {
@@ -21,7 +22,7 @@ class PengunjungController extends Controller
             'nik' => 'required|string|size:16|unique:pengunjung,nik',
             'nama_lengkap' => 'required|string|max:255',
             'nomor_telepon' => 'required|string|max:20',
-            'tanggal_lahir' => 'required|date',
+            'tanggal_lahir' => 'required|date|before_or_equal:today',
             'asal_daerah' => 'required|string|max:255',
             'tujuan_kunjungan' => 'required|string',
             'lama_kunjungan' => 'required|integer|min:1',
@@ -69,6 +70,12 @@ class PengunjungController extends Controller
             'status' => 'required|in:Diketahui,Ditolak'
         ]);
 
+        $akses = WilayahAkses::dariSession();
+        $pengunjung = DB::table('pengunjung')->where('id_pengunjung', $id)->first();
+        if (!$pengunjung || (!$akses->isGlobal() && !$akses->mencakup($pengunjung))) {
+            return redirect()->back()->with('error', 'Laporan pendatang tidak ditemukan atau berada di luar wilayah Anda.');
+        }
+
         DB::table('pengunjung')->where('id_pengunjung', $id)->update([
             'status_laporan' => $request->status,
             'updated_at' => now(),
@@ -85,6 +92,11 @@ class PengunjungController extends Controller
             
             if (!$pengunjung) {
                 return redirect()->back()->with('error', 'Data pengunjung tidak ditemukan.');
+            }
+
+            $akses = WilayahAkses::dariSession();
+            if (!$akses->isGlobal() && !($akses->isRt() && $akses->mencakup($pengunjung))) {
+                return redirect()->back()->with('error', 'Anda tidak berhak menghapus data pendatang ini.');
             }
 
             // Hapus data pengunjung
