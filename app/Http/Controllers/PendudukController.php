@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\WilayahAkses;
+use App\Services\DataYatim;
 
 class PendudukController extends Controller
 {
@@ -26,6 +27,73 @@ class PendudukController extends Controller
             return 'Wilayah akun RT Anda belum lengkap (desa/RW/RT). Hubungi GMLS untuk memperbaiki akun.';
         }
         return [$akses, $wilayahRt];
+    }
+
+    /** Rumah milik nomor KK yang sudah terdaftar (null bila KK baru), plus penanda apakah datanya lengkap. */
+    private function rumahKk($nomorKk)
+    {
+        if (!$nomorKk) {
+            return null;
+        }
+        $rumah = DB::table('keluarga as k')
+            ->join('rumah as r', 'k.id_rumah', '=', 'r.id_rumah')
+            ->where('k.nomor_kk', $nomorKk)
+            ->first(['k.id_kk', 'k.id_kepala_keluarga', 'r.id_rumah', 'r.alamat_lengkap', 'r.latitude', 'r.longitude',
+                     'r.id_provinsi', 'r.id_kabupaten', 'r.id_kecamatan', 'r.id_desa', 'r.id_rw', 'r.id_rt']);
+        if ($rumah) {
+            $rumah->lengkap = is_numeric($rumah->latitude) && is_numeric($rumah->longitude)
+                && $rumah->id_provinsi && $rumah->id_kabupaten && $rumah->id_kecamatan
+                && $rumah->id_desa && $rumah->id_rw && $rumah->id_rt;
+        }
+        return $rumah;
+    }
+
+    /**
+     * Dipanggil form input saat nomor KK diketik: bila KK sudah terdaftar,
+     * form memakai rumah KK tersebut (alamat, wilayah, titik peta).
+     */
+    public function cekKk(Request $request)
+    {
+        $hak = $this->aksesInput();
+        if (is_string($hak)) {
+            return response()->json(['message' => $hak], 403);
+        }
+        [$akses] = $hak;
+
+        $nomor = (string) $request->query('nomor_kk', '');
+        if (!preg_match('/^\d{16}$/', $nomor)) {
+            return response()->json(['ada' => false]);
+        }
+        $rumah = $this->rumahKk($nomor);
+        if (!$rumah) {
+            return response()->json(['ada' => false]);
+        }
+        if (!$akses->isGlobal() && !$akses->mencakup($rumah)) {
+            return response()->json(['ada' => true, 'boleh' => false, 'pesan' => 'Nomor KK ini sudah terdaftar di wilayah RT lain.']);
+        }
+
+        $wilayah = DB::table('rumah as r')
+            ->leftJoin('desa as d', 'r.id_desa', '=', 'd.id_desa')
+            ->leftJoin('kecamatan as kc', 'r.id_kecamatan', '=', 'kc.id_kecamatan')
+            ->leftJoin('kabupaten as kb', 'r.id_kabupaten', '=', 'kb.id_kabupaten')
+            ->leftJoin('rt', 'r.id_rt', '=', 'rt.id_rt')
+            ->leftJoin('rw', 'r.id_rw', '=', 'rw.id_rw')
+            ->where('r.id_rumah', $rumah->id_rumah)
+            ->first(['d.nama_desa', 'kc.nama_kecamatan', 'kb.nama_kabupaten', 'rt.nomor_rt', 'rw.nomor_rw']);
+
+        return response()->json([
+            'ada'       => true,
+            'boleh'     => true,
+            'lengkap'   => (bool) $rumah->lengkap,
+            'alamat'    => $rumah->alamat_lengkap,
+            'latitude'  => $rumah->latitude,
+            'longitude' => $rumah->longitude,
+            'wilayah'   => trim(sprintf('RT %s / RW %s, Desa %s, Kec. %s, %s',
+                $wilayah->nomor_rt ?? '-', $wilayah->nomor_rw ?? '-', $wilayah->nama_desa ?? '-',
+                $wilayah->nama_kecamatan ?? '-', $wilayah->nama_kabupaten ?? '-')),
+            'kepala'    => $rumah->id_kepala_keluarga ? DB::table('warga')->where('id_warga', $rumah->id_kepala_keluarga)->value('nama_lengkap') : null,
+            'anggota'   => DB::table('warga')->where('id_kk', $rumah->id_kk)->pluck('nama_lengkap'),
+        ]);
     }
 
     /** Nomor RT/RW dari CSV ("1", "01", "001") → id di tabel rt/rw. */
@@ -75,16 +143,31 @@ class PendudukController extends Controller
         }
 
         // NIK / KK yang sudah terdaftar di wilayah lain tidak boleh ditimpa
+        $rumahKk = $this->rumahKk($request->nomor_kk);
         if (!$akses->isGlobal()) {
             $wargaAda = DB::table('warga')->where('nik', $request->nik)->value('id_warga');
             if ($wargaAda && !$akses->mencakupWarga($wargaAda)) {
                 return redirect()->back()->withInput()->with('error', 'NIK ini sudah terdaftar di wilayah RT lain. Hubungi RT terkait atau GMLS.');
             }
-            $rumahKk = DB::table('keluarga as k')->join('rumah as r', 'k.id_rumah', '=', 'r.id_rumah')
-                ->where('k.nomor_kk', $request->nomor_kk)->first(['r.id_kabupaten', 'r.id_kecamatan', 'r.id_desa', 'r.id_rw', 'r.id_rt']);
             if ($rumahKk && !$akses->mencakup($rumahKk)) {
                 return redirect()->back()->withInput()->with('error', 'Nomor KK ini sudah terdaftar di wilayah RT lain. Hubungi RT terkait atau GMLS.');
             }
+        }
+
+        // Anggota dari KK yang sudah terdaftar tinggal di rumah KK tersebut:
+        // alamat, wilayah & titik rumah otomatis mengikuti rumah KK (tidak perlu klik peta lagi)
+        if ($rumahKk && $rumahKk->lengkap) {
+            $request->merge([
+                'provinsi'       => $rumahKk->id_provinsi,
+                'kabupaten'      => $rumahKk->id_kabupaten,
+                'kecamatan'      => $rumahKk->id_kecamatan,
+                'desa'           => $rumahKk->id_desa,
+                'id_rw'          => $rumahKk->id_rw,
+                'id_rt'          => $rumahKk->id_rt,
+                'alamat_lengkap' => $rumahKk->alamat_lengkap,
+                'latitude'       => $rumahKk->latitude,
+                'longitude'      => $rumahKk->longitude,
+            ]);
         }
 
         $request->validate([
@@ -110,9 +193,10 @@ class PendudukController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($request) {
+            DB::transaction(function () use ($request, $rumahKk) {
                 $id_kk = null;
                 $id_rumah = null;
+                $existingKk = null;
 
                 if ($request->nomor_kk) {
                     $existingKk = DB::table('keluarga')->where('nomor_kk', $request->nomor_kk)->first();
@@ -152,18 +236,26 @@ class PendudukController extends Controller
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
-                } else {
-                    if ($lat && $lng) {
-                        DB::table('rumah')->where('id_rumah', $id_rumah)->update([
-                            'latitude' => $lat,
-                            'longitude' => $lng,
-                            'alamat_lengkap' => $request->alamat_lengkap,
-                            'id_rt' => $request->id_rt ?: DB::raw('id_rt'),
-                            'id_rw' => $request->id_rw ?: DB::raw('id_rw'),
-                            'zona_dianalisis_at' => null, // koordinat diperbarui → zona dianalisis ulang
-                            'updated_at' => now(),
-                        ]);
-                    }
+                } elseif (!($rumahKk && $rumahKk->lengkap)) {
+                    // Rumah KK lama belum lengkap (tanpa titik/wilayah): dilengkapi dari isian form ini
+                    DB::table('rumah')->where('id_rumah', $id_rumah)->update([
+                        'latitude' => $lat,
+                        'longitude' => $lng,
+                        'alamat_lengkap' => $request->alamat_lengkap,
+                        'id_rt' => $request->id_rt,
+                        'id_rw' => $request->id_rw,
+                        'id_desa' => $request->desa,
+                        'id_kecamatan' => $request->kecamatan,
+                        'id_kabupaten' => $request->kabupaten,
+                        'id_provinsi' => $request->provinsi,
+                        'zona_dianalisis_at' => null, // koordinat diperbarui → zona dianalisis ulang
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                // KK lama yang belum tercatat rumahnya ditautkan ke rumah ini
+                if ($id_kk && $existingKk && !$existingKk->id_rumah) {
+                    DB::table('keluarga')->where('id_kk', $id_kk)->update(['id_rumah' => $id_rumah, 'updated_at' => now()]);
                 }
 
                 if (!$id_kk && $request->nomor_kk) {
@@ -214,6 +306,8 @@ class PendudukController extends Controller
                         'updated_at' => now(),
                     ]);
                     $id_warga = $existingWarga->id_warga;
+                    // Warga pindah KK/rumah: KK & rumah lama dihapus bila tidak berpenghuni lagi
+                    DataYatim::bersihkan($existingWarga->id_kk, $existingWarga->id_rumah);
                 } else {
                     $id_warga = DB::table('warga')->insertGetId([
                         'nik' => $request->nik,
@@ -254,6 +348,8 @@ class PendudukController extends Controller
                             'id_rumah' => $id_rumah,
                             'updated_at' => now(),
                         ]);
+                    // Satu KK hanya punya satu kepala keluarga
+                    DB::table('warga')->where('id_kk', $id_kk)->where('id_warga', '!=', $id_warga)->update(['is_kepala_keluarga' => 0]);
                 }
             });
 
@@ -615,15 +711,20 @@ class PendudukController extends Controller
                         'updated_at'          => now(),
                     ]);
                 } else if (!empty($latitude) && !empty($longitude)) {
-                    DB::table('rumah')->where('id_rumah', $id_rumah)->update([
+                    // Zona hanya dianalisis ulang bila titik rumah benar-benar berubah
+                    $rumahLama = DB::table('rumah')->where('id_rumah', $id_rumah)->first(['latitude', 'longitude']);
+                    $berubah = !$rumahLama || (float) $rumahLama->latitude !== (float) $latitude || (float) $rumahLama->longitude !== (float) $longitude;
+                    DB::table('rumah')->where('id_rumah', $id_rumah)->update(array_merge([
                         'latitude'  => $latitude,
                         'longitude' => $longitude,
-                        'zona_dianalisis_at' => null,
                         'updated_at' => now(),
-                    ]);
+                    ], $berubah ? ['zona_dianalisis_at' => null] : []));
                 }
 
                 // 2. Dapatkan / Buat Record Keluarga (KK)
+                if ($id_kk && empty($existingKk->id_rumah)) {
+                    DB::table('keluarga')->where('id_kk', $id_kk)->update(['id_rumah' => $id_rumah, 'updated_at' => now()]);
+                }
                 if (!$id_kk && !empty($nomor_kk)) {
                     $id_kk = DB::table('keluarga')->insertGetId([
                         'nomor_kk'   => $nomor_kk,
@@ -666,6 +767,7 @@ class PendudukController extends Controller
                     ]);
                     $id_warga = $existingWarga->id_warga;
                     $updatedCount++;
+                    DataYatim::bersihkan($existingWarga->id_kk, $existingWarga->id_rumah);
                 } else {
                     $id_warga = DB::table('warga')->insertGetId([
                         'nik'                    => $nik,
@@ -705,6 +807,7 @@ class PendudukController extends Controller
                         'id_rumah'           => $id_rumah,
                         'updated_at'         => now(),
                     ]);
+                    DB::table('warga')->where('id_kk', $id_kk)->where('id_warga', '!=', $id_warga)->update(['is_kepala_keluarga' => 0]);
                 }
             }
 

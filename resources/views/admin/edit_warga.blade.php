@@ -366,7 +366,7 @@
                     <select name="jenis_konstruksi" class="select select-bordered w-full bg-gray-50 text-xs font-semibold">
                         <option value="Permanen" {{ old('jenis_konstruksi', $rumah->jenis_konstruksi ?? '') == 'Permanen' ? 'selected' : '' }}>Permanen</option>
                         <option value="Semi Permanen" {{ old('jenis_konstruksi', $rumah->jenis_konstruksi ?? '') == 'Semi Permanen' ? 'selected' : '' }}>Semi Permanen</option>
-                        <option value="Panggung / Kayu" {{ old('jenis_konstruksi', $rumah->jenis_konstruksi ?? '') == 'Panggung / Kayu' ? 'selected' : '' }}>Panggung / Kayu</option>
+                        <option value="Kayu" {{ old('jenis_konstruksi', $rumah->jenis_konstruksi ?? '') == 'Kayu' ? 'selected' : '' }}>Panggung / Kayu</option>
                     </select>
                 </div>
 

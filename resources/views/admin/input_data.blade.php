@@ -276,22 +276,41 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Nomor Kartu Keluarga (KK) <span class="text-rose-600">*</span></label>
-                    <input type="text" name="nomor_kk" value="{{ old('nomor_kk') }}" maxlength="16" required
+                    <input type="text" name="nomor_kk" id="nomor_kk" value="{{ old('nomor_kk') }}" maxlength="16" required inputmode="numeric"
                         class="w-full bg-white text-slate-900 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500" placeholder="16 digit Nomor KK">
-                    <p class="text-[10px] text-slate-400 font-medium mt-1">Harus terdiri dari 16 digit angka</p>
+                    <p id="status-kk" class="text-[10px] text-slate-400 font-medium mt-1">Harus terdiri dari 16 digit angka</p>
                 </div>
 
                 <div class="flex items-center pt-2 sm:pt-6">
                     <label class="cursor-pointer flex items-center gap-3">
-                        <input type="checkbox" name="is_kepala_keluarga" class="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500" {{ old('is_kepala_keluarga') ? 'checked' : '' }}>
+                        <input type="checkbox" name="is_kepala_keluarga" id="is_kepala_keluarga" class="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500" {{ old('is_kepala_keluarga') ? 'checked' : '' }}>
                         <span class="font-bold text-xs text-slate-800 uppercase">Warga Ini Adalah Kepala Keluarga (KK)</span>
                     </label>
                 </div>
             </div>
+
+            {{-- Muncul bila nomor KK sudah terdaftar: anggota baru otomatis tinggal di rumah KK ini --}}
+            <div id="info-kk" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:p-4 space-y-3">
+                <p class="text-xs font-extrabold text-emerald-800 flex items-center gap-2">
+                    <i class="fas fa-house-user"></i> Nomor KK sudah terdaftar — rumah & titik peta otomatis mengikuti KK ini
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-slate-700">
+                    <div class="space-y-1">
+                        <p><span class="font-bold text-slate-900">Kepala Keluarga:</span> <span id="info-kk-kepala">-</span></p>
+                        <p><span class="font-bold text-slate-900">Anggota terdaftar:</span> <span id="info-kk-anggota">-</span></p>
+                        <p><span class="font-bold text-slate-900">Alamat:</span> <span id="info-kk-alamat">-</span></p>
+                        <p><span class="font-bold text-slate-900">Wilayah:</span> <span id="info-kk-wilayah">-</span></p>
+                        <p><span class="font-bold text-slate-900">Titik rumah:</span> <span id="info-kk-titik">-</span></p>
+                        <p id="info-kk-ganti-kepala" class="hidden text-amber-700 font-bold"><i class="fas fa-exclamation-triangle"></i> Kepala keluarga KK ini akan diganti dengan warga yang sedang diinput.</p>
+                    </div>
+                    <div id="peta-kk" class="h-36 rounded-lg border border-emerald-200 overflow-hidden z-10"></div>
+                </div>
+                <p id="info-kk-belum-lengkap" class="hidden text-[11px] font-bold text-amber-700"><i class="fas fa-info-circle"></i> Data rumah KK ini belum lengkap. Lengkapi alamat, wilayah, dan titik peta di bawah.</p>
+            </div>
         </div>
 
         <!-- 5. DATA ALAMAT & WILAYAH -->
-        <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 sm:p-6 space-y-4">
+        <div id="blok-alamat" class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 sm:p-6 space-y-4">
             <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
                 <div class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-black text-sm">5</div>
                 <h3 class="font-extrabold text-slate-900 text-base uppercase tracking-wide">Data Alamat & Wilayah Domisili</h3>
@@ -363,7 +382,7 @@
         </div>
 
         <!-- 6. DATA BANGUNAN RUMAH & PETA KOORDINAT -->
-        <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 sm:p-6 space-y-4">
+        <div id="blok-rumah" class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 sm:p-6 space-y-4">
             <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
                 <div class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-black text-sm">6</div>
                 <h3 class="font-extrabold text-slate-900 text-base uppercase tracking-wide">Data Rumah & Koordinat Lokasi</h3>
@@ -376,7 +395,7 @@
                         <option value="">-- Pilih Jenis --</option>
                         <option value="Permanen">Permanen</option>
                         <option value="Semi Permanen">Semi Permanen</option>
-                        <option value="Panggung / Kayu">Panggung / Kayu</option>
+                        <option value="Kayu">Panggung / Kayu</option>
                     </select>
                 </div>
 
@@ -488,6 +507,7 @@ $(document).ready(function() {
     var defaultLat = -6.967000;
     var defaultLng = 106.333000;
     var map = L.map('map').setView([defaultLat, defaultLng], 12);
+    window.petaInput = map;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -548,6 +568,95 @@ $(document).ready(function() {
             });
         }
     });
+});
+</script>
+
+<script>
+// Nomor KK sudah terdaftar → anggota baru memakai rumah KK itu (alamat, wilayah, titik peta tidak perlu diisi lagi)
+$(function () {
+    const urlCek = "{{ route('penduduk.cekKk') }}";
+    const $kk = $('#nomor_kk'), $status = $('#status-kk'), $info = $('#info-kk');
+    const $blok = $('#blok-alamat, #blok-rumah');
+    let petaKk = null, penandaKk = null, kepalaAda = false, permintaan = 0;
+
+    // Sembunyikan & nonaktifkan isian rumah (input nonaktif tidak dikirim & tidak divalidasi browser)
+    function aturBlokRumah(sembunyi) {
+        $blok.toggleClass('hidden', sembunyi);
+        $blok.find('input, select, textarea').each(function () {
+            const $el = $(this);
+            if (sembunyi) {
+                if ($el.data('nonaktifAsli') === undefined) $el.data('nonaktifAsli', $el.prop('disabled'));
+                $el.prop('disabled', true);
+            } else if ($el.data('nonaktifAsli') !== undefined) {
+                $el.prop('disabled', $el.data('nonaktifAsli')).removeData('nonaktifAsli');
+            }
+        });
+        if (!sembunyi && window.petaInput) setTimeout(() => window.petaInput.invalidateSize(), 50);
+    }
+
+    function aturPeringatanKepala() {
+        $('#info-kk-ganti-kepala').toggleClass('hidden', !(kepalaAda && $('#is_kepala_keluarga').is(':checked')));
+    }
+
+    function reset(pesan, kelas) {
+        $info.addClass('hidden');
+        aturBlokRumah(false);
+        kepalaAda = false;
+        $status.text(pesan).attr('class', 'text-[10px] font-medium mt-1 ' + (kelas || 'text-slate-400'));
+    }
+
+    function cek() {
+        const nomor = ($kk.val() || '').replace(/\D/g, '');
+        if (nomor.length !== 16) {
+            reset('Harus terdiri dari 16 digit angka');
+            return;
+        }
+        const ke = ++permintaan;
+        $status.text('Memeriksa nomor KK...').attr('class', 'text-[10px] text-slate-500 font-medium mt-1');
+        $.getJSON(urlCek, { nomor_kk: nomor }).done(function (d) {
+            if (ke !== permintaan) return;
+            if (!d.ada) {
+                reset('KK baru — isi alamat dan tandai titik rumah di peta.', 'text-sky-700 font-bold');
+                return;
+            }
+            if (!d.boleh) {
+                reset(d.pesan, 'text-rose-600 font-bold');
+                return;
+            }
+
+            kepalaAda = !!d.kepala;
+            $('#info-kk-kepala').text(d.kepala || 'Belum ditentukan');
+            $('#info-kk-anggota').text(d.anggota.length ? d.anggota.join(', ') : '-');
+            $('#info-kk-alamat').text(d.alamat || '-');
+            $('#info-kk-wilayah').text(d.wilayah || '-');
+            $('#info-kk-titik').text(d.latitude && d.longitude ? d.latitude + ', ' + d.longitude : 'Belum ada');
+            $('#info-kk-belum-lengkap').toggleClass('hidden', d.lengkap);
+            $info.removeClass('hidden');
+            aturBlokRumah(d.lengkap);
+            aturPeringatanKepala();
+            $status.text('KK terdaftar (' + d.anggota.length + ' anggota).').attr('class', 'text-[10px] text-emerald-700 font-bold mt-1');
+
+            const ada = d.latitude && d.longitude && !isNaN(parseFloat(d.latitude));
+            $('#peta-kk').toggleClass('hidden', !ada);
+            if (ada) {
+                const titik = [parseFloat(d.latitude), parseFloat(d.longitude)];
+                if (!petaKk) {
+                    petaKk = L.map('peta-kk', { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false });
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(petaKk);
+                }
+                petaKk.setView(titik, 16);
+                if (penandaKk) penandaKk.setLatLng(titik); else penandaKk = L.marker(titik).addTo(petaKk);
+                setTimeout(() => petaKk.invalidateSize(), 50);
+            }
+        }).fail(function () {
+            if (ke === permintaan) reset('Gagal memeriksa nomor KK, isi data rumah secara manual.', 'text-amber-700 font-bold');
+        });
+    }
+
+    let jeda;
+    $kk.on('input', function () { clearTimeout(jeda); jeda = setTimeout(cek, 350); });
+    $('#is_kepala_keluarga').on('change', aturPeringatanKepala);
+    if ($kk.val()) cek();
 });
 </script>
 @endpush

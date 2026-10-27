@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\WilayahAkses;
+use App\Services\DataYatim;
 
 class WargaController extends Controller
 {
@@ -257,14 +258,31 @@ class WargaController extends Controller
             'nomor_kk' => 'required|numeric|digits:16',
         ]);
 
+        // Bila nomor KK diganti ke KK yang sudah terdaftar di rumah lain, warga pindah ke rumah KK itu
+        $kkTujuan = DB::table('keluarga as k')->join('rumah as r', 'k.id_rumah', '=', 'r.id_rumah')
+            ->where('k.nomor_kk', $request->nomor_kk)
+            ->first(['k.id_kk', 'r.id_rumah', 'r.alamat_lengkap', 'r.id_provinsi', 'r.id_kabupaten', 'r.id_kecamatan', 'r.id_desa', 'r.id_rw', 'r.id_rt']);
+        $rumahSekarang = DB::table('warga')->where('id_warga', $id)->value('id_rumah');
+        $pindahRumah = $kkTujuan && (int) $kkTujuan->id_rumah !== (int) $rumahSekarang;
+        if ($pindahRumah && !$akses->isGlobal() && !$akses->mencakup($kkTujuan)) {
+            return redirect()->back()->withInput()->with('error', 'Nomor KK ini sudah terdaftar di wilayah RT lain.');
+        }
+
         try {
-            DB::transaction(function () use ($request, $id) {
+            DB::transaction(function () use ($request, $id, $kkTujuan, $pindahRumah) {
                 $oldWarga = DB::table('warga')->where('id_warga', $id)->first();
                 if (!$oldWarga) throw new \Exception("Data warga tidak ditemukan.");
 
                 $id_rumah = $oldWarga->id_rumah;
                 $id_kk_lama = $oldWarga->id_kk;
-                if ($id_rumah) {
+                if ($pindahRumah) {
+                    // Ikut rumah KK tujuan; data rumah pada form diabaikan
+                    $id_rumah = $kkTujuan->id_rumah;
+                    $request->merge([
+                        'alamat_lengkap' => $kkTujuan->alamat_lengkap, 'provinsi' => $kkTujuan->id_provinsi,
+                        'kabupaten' => $kkTujuan->id_kabupaten, 'kecamatan' => $kkTujuan->id_kecamatan, 'desa' => $kkTujuan->id_desa,
+                    ]);
+                } elseif ($id_rumah) {
                     // Zona dihitung otomatis dari InaRISK BNPB; dianalisis ulang bila koordinat berubah
                     $rumahLama = DB::table('rumah')->where('id_rumah', $id_rumah)->first(['latitude', 'longitude']);
                     $koordinatBerubah = !$rumahLama
@@ -319,12 +337,23 @@ class WargaController extends Controller
 
                 if ($isKepalaKeluarga && $id_kk) {
                     DB::table('keluarga')->where('id_kk', $id_kk)->update(['id_kepala_keluarga' => $id, 'id_rumah' => $id_rumah, 'updated_at' => now()]);
-                } elseif (!$isKepalaKeluarga && $id_kk_lama && $id_kk_lama != $id_kk) {
+                    // Satu KK hanya punya satu kepala keluarga
+                    DB::table('warga')->where('id_kk', $id_kk)->where('id_warga', '!=', $id)->update(['is_kepala_keluarga' => 0]);
+                } elseif (!$isKepalaKeluarga && $id_kk) {
+                    DB::table('keluarga')->where('id_kk', $id_kk)->where('id_kepala_keluarga', $id)->update(['id_kepala_keluarga' => null, 'updated_at' => now()]);
+                }
+                if ($id_kk_lama && $id_kk_lama != $id_kk) {
                     DB::table('keluarga')->where('id_kk', $id_kk_lama)->where('id_kepala_keluarga', $id)->update(['id_kepala_keluarga' => null, 'updated_at' => now()]);
                 }
+
+                // KK / rumah lama yang kini kosong ikut dihapus
+                DataYatim::bersihkan($id_kk_lama, $oldWarga->id_rumah);
             });
 
-            return redirect()->route('warga.edit', $id)->with('success', 'Data penduduk berhasil diperbarui!');
+            $pesan = $pindahRumah
+                ? 'Data penduduk berhasil diperbarui! Warga dipindahkan ke rumah sesuai nomor KK yang baru.'
+                : 'Data penduduk berhasil diperbarui!';
+            return redirect()->route('warga.edit', $id)->with('success', $pesan);
         } catch (\Exception $e) {
             return redirect()->back()->withInput()->with('error', 'Gagal memperbarui data: ' . $e->getMessage());
         }
@@ -340,8 +369,27 @@ class WargaController extends Controller
         }
 
         try {
-            DB::table('warga')->where('id_warga', $id)->delete();
-            return redirect()->back()->with('success', 'Data warga berhasil dihapus!');
+            $hapus = DB::transaction(function () use ($id) {
+                $warga = DB::table('warga')->where('id_warga', $id)->first(['id_kk', 'id_rumah']);
+                DB::table('pengajuan_update')->where('id_warga', $id)->delete();
+                DB::table('warga')->where('id_warga', $id)->delete();
+
+                // KK & rumah ikut terhapus bila warga ini penghuni terakhirnya
+                $kkAda = $warga->id_kk && DB::table('keluarga')->where('id_kk', $warga->id_kk)->exists();
+                $rumahAda = $warga->id_rumah && DB::table('rumah')->where('id_rumah', $warga->id_rumah)->exists();
+                DataYatim::bersihkan($warga->id_kk, $warga->id_rumah);
+                return [
+                    'kk' => $kkAda && !DB::table('keluarga')->where('id_kk', $warga->id_kk)->exists(),
+                    'rumah' => $rumahAda && !DB::table('rumah')->where('id_rumah', $warga->id_rumah)->exists(),
+                ];
+            });
+
+            $pesan = 'Data warga berhasil dihapus!';
+            if ($hapus['kk'] || $hapus['rumah']) {
+                $pesan .= ' ' . implode(' dan ', array_filter([$hapus['kk'] ? 'Kartu Keluarga' : null, $hapus['rumah'] ? 'data rumah' : null]))
+                    . ' ikut dihapus karena tidak ada anggota lain.';
+            }
+            return redirect()->back()->with('success', $pesan);
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal menghapus data warga: ' . $e->getMessage());
         }

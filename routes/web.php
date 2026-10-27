@@ -40,6 +40,7 @@ Route::middleware(['cek.session:admin'])->group(function () {
     // Pendataan Penduduk & Fitur CSV (Template / Export / Import)
     Route::get('/input-data', [PendudukController::class, 'create'])->name('penduduk.create');
     Route::post('/input-data', [PendudukController::class, 'store'])->name('penduduk.store');
+    Route::get('/input-data/cek-kk', [PendudukController::class, 'cekKk'])->name('penduduk.cekKk');
     Route::get('/input-data/download-template-csv', [PendudukController::class, 'downloadTemplateCsv'])->name('penduduk.template.csv');
     Route::get('/input-data/export-csv', [PendudukController::class, 'exportCsv'])->name('penduduk.export.csv');
     Route::post('/input-data/import-csv', [PendudukController::class, 'importCsv'])->name('penduduk.import.csv');
