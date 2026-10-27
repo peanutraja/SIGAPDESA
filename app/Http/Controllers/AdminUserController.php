@@ -58,8 +58,9 @@ class AdminUserController extends Controller
         }
 
         $users = $query->orderBy('a.id_admin', 'desc')->get();
+        $namaDesaSaya = $userDesa ? DB::table('desa')->where('id_desa', $userDesa)->value('nama_desa') : null;
 
-        return view('admin.kelola_user', compact('users', 'provinsi', 'userRole'));
+        return view('admin.kelola_user', compact('users', 'provinsi', 'userRole', 'namaDesaSaya'));
     }
 
     public function store(Request $request)

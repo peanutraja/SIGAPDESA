@@ -101,6 +101,12 @@ class PendudukController extends Controller
             'kecamatan' => 'required',
             'alamat_lengkap' => 'required',
             'nomor_kk' => 'required|numeric|digits:16',
+            // Titik rumah wajib: dipakai peta & penentuan zona InaRISK
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+        ], [
+            'latitude.required' => 'Tandai lokasi rumah di peta terlebih dahulu.',
+            'longitude.required' => 'Tandai lokasi rumah di peta terlebih dahulu.',
         ]);
 
         try {
@@ -289,8 +295,8 @@ class PendudukController extends Controller
                 'Tetap', 'Menetap', '0', '',
                 'Tidak Ada', '', '="3601234567890001"', '1',
                 'Jl. Merdeka No. 10', 'BANTEN', 'KABUPATEN LEBAK', 'CIBADAK', 'CIMENTENG',
-                '001', '002', 'Permanen', 'Hijau',
-                '-6.882100', '106.234100'
+                '001', '002', 'Permanen', '',
+                '="-6.882100"', '="106.234100"'
             ],
             [
                 '="3601234567890002"', 'Siti Rahmawati', 'KABUPATEN LEBAK', '1994-08-20', 'P',
@@ -298,8 +304,8 @@ class PendudukController extends Controller
                 'Tidak Tetap', 'Menetap', '1', '2026-11-25',
                 'Tidak Ada', '', '="3601234567890001"', '0',
                 'Jl. Merdeka No. 10', 'BANTEN', 'KABUPATEN LEBAK', 'CIBADAK', 'CIMENTENG',
-                '001', '002', 'Permanen', 'Hijau',
-                '-6.882100', '106.234100'
+                '001', '002', 'Permanen', '',
+                '="-6.882100"', '="106.234100"'
             ]
         ];
 
@@ -347,7 +353,7 @@ class PendudukController extends Controller
                 'w.jenis_penghasilan', 'w.status_domisili', 'w.status_kehamilan', 'w.perkiraan_lahir',
                 'w.kategori_disabilitas', 'w.keterangan_disabilitas', 'w.nomor_kk', 'w.is_kepala_keluarga',
                 'r.alamat_lengkap', 'p.nama_provinsi', 'kb.nama_kabupaten', 'c.nama_kecamatan', 'd.nama_desa',
-                'rt.nomor_rt', 'rw.nomor_rw', 'r.jenis_konstruksi', 'r.status_zona_tsunami',
+                'rt.nomor_rt', 'rw.nomor_rw', 'r.jenis_konstruksi', 'r.status_zona_tsunami', 'r.zona_dianalisis_at',
                 'r.latitude', 'r.longitude'
             );
 
@@ -401,9 +407,11 @@ class PendudukController extends Controller
                     $row->nomor_rt,
                     $row->nomor_rw,
                     $row->jenis_konstruksi,
-                    $row->status_zona_tsunami,
-                    $row->latitude,
-                    $row->longitude,
+                    // Hanya zona hasil analisis InaRISK; zona lama yang diisi manual tidak diekspor
+                    $row->zona_dianalisis_at ? $row->status_zona_tsunami : '',
+                    // Format ="..." agar Excel (format angka Indonesia) tidak mengubah koordinat
+                    $row->latitude !== null && $row->latitude !== '' ? '="' . $row->latitude . '"' : '',
+                    $row->longitude !== null && $row->longitude !== '' ? '="' . $row->longitude . '"' : '',
                 ], ';');
             }
 
@@ -464,10 +472,13 @@ class PendudukController extends Controller
             $addedCount = 0;
             $updatedCount = 0;
             $skippedCount = 0;
+            $barisTidakValid = [];
+            $baris = 1; // baris 1 = header
 
             DB::beginTransaction();
 
             while (($row = fgetcsv($handle, 2000, $delimiter)) !== false) {
+                $baris++;
                 if (empty($row) || count($row) < 2) continue;
 
                 $getValue = function($key) use ($headerMap, $row) {
@@ -490,6 +501,13 @@ class PendudukController extends Controller
 
                 $tempat_lahir          = $getValue('TEMPAT_LAHIR');
                 $tanggal_lahir         = $getValue('TANGGAL_LAHIR');
+
+                // Baris dengan NIK tidak 16 digit atau tanggal lahir tidak valid/di masa depan tidak disimpan
+                $tglLahirTs = $tanggal_lahir ? strtotime($tanggal_lahir) : false;
+                if (!preg_match('/^\d{16}$/', $nik) || ($tanggal_lahir && ($tglLahirTs === false || $tglLahirTs > time()))) {
+                    $barisTidakValid[] = $baris;
+                    continue;
+                }
                 $jenis_kelamin         = strtoupper($getValue('JENIS_KELAMIN') ?? 'L');
                 $golongan_darah        = $getValue('GOLONGAN_DARAH') ?? '-';
                 $agama                 = $getValue('AGAMA');
@@ -701,6 +719,9 @@ class PendudukController extends Controller
             }
             if ($skippedCount > 0) {
                 $msg .= " {$skippedCount} baris dilewati karena NIK/KK-nya sudah terdaftar di wilayah RT lain.";
+            }
+            if ($barisTidakValid) {
+                $msg .= " " . count($barisTidakValid) . " baris dilewati karena NIK tidak 16 digit atau tanggal lahir tidak valid/melebihi hari ini (baris ke-" . implode(', ', $barisTidakValid) . ").";
             }
 
             return redirect()->back()->with('success', $msg);

@@ -77,6 +77,17 @@
         </div>
     @endif
 
+    @if($errors->any())
+        <div class="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-bold p-4 flex items-start gap-2 shadow-xs">
+            <i class="fas fa-exclamation-triangle text-base text-rose-600"></i>
+            <ul class="list-disc pl-4 space-y-0.5">
+                @foreach($errors->all() as $pesan)
+                    <li>{{ $pesan }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <!-- FORM INPUT PENDUDUK MANUAL -->
     <form method="POST" action="{{ route('penduduk.store') }}" class="space-y-5">
         @csrf

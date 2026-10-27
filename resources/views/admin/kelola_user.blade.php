@@ -5,7 +5,9 @@
 @section('content')
 @php
     $adminSession = session('admin');
-    $currentUserRole = $userRole ?? strtolower($adminSession['role'] ?? 'gmls');
+    $currentUserRole = $userRole ?? strtolower($adminSession['role'] ?? '');
+    $isGmlsUser = in_array($currentUserRole, ['gmls', 'admin']);
+    $idAdminSaya = (int) ($adminSession['id_admin'] ?? 0);
 @endphp
 
 <div class="max-w-6xl mx-auto space-y-5" data-theme="light">
@@ -43,6 +45,13 @@
         <h3 class="text-base sm:text-lg font-extrabold text-rose-600 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
             <i class="fas fa-user-plus"></i> Form Buat Akun Admin
         </h3>
+
+        @unless($isGmlsUser)
+            <div class="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                <i class="fas fa-lock mt-0.5"></i>
+                <span>Akun yang Anda buat otomatis berada di wilayah <b>Desa {{ $namaDesaSaya ?? '-' }}</b> dan hanya bisa melihat data desa ini. Anda dapat membuat akun Kepala Desa, Ketua RW, dan Ketua RT.</span>
+            </div>
+        @endunless
 
         <form action="{{ route('admin.user.store') }}" method="POST" class="space-y-4">
             @csrf
@@ -246,7 +255,14 @@
                                 @endif
                             </td>
                             <td class="py-3.5 px-3 text-center">
-                                @if($idAdmin)
+                                @php
+                                    // Sama dengan aturan di AdminUserController::destroy
+                                    $bisaHapus = $idAdmin && (int) $idAdmin !== $idAdminSaya
+                                        && ($isGmlsUser || in_array($roleVal, ['kepala_desa', 'ketua_rw', 'ketua_rt']));
+                                @endphp
+                                @if(!$bisaHapus)
+                                    <span class="text-[10px] text-slate-400 font-semibold">{{ (int) $idAdmin === $idAdminSaya ? 'Akun Anda' : '-' }}</span>
+                                @else
                                     <form action="{{ route('admin.user.destroy', $idAdmin) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus akun admin ini?')">
                                         @csrf
                                         @method('DELETE')
@@ -399,9 +415,11 @@ function toggleWilayah() {
 
     $('#box_wilayah').removeClass('hidden');
 
-    // Filter otomatis jika yang membuat adalah akun Pemerintah Desa
-    if(userRole === 'pemerintah_desa') {
-        if (role === 'ketua_rw') {
+    // Akun desa (Pemdes dengan hak buat akun): desa terkunci, hanya RW/RT yang dipilih
+    if (!['gmls', 'admin'].includes(userRole)) {
+        if (role === 'kepala_desa') {
+            $('#box_wilayah').addClass('hidden');
+        } else if (role === 'ketua_rw') {
             $('#f_rw').removeClass('hidden');
             loadRwOptions();
         } else if (role === 'ketua_rt') {

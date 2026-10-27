@@ -60,6 +60,17 @@
         </div>
     @endif
 
+    @if($errors->any())
+        <div class="alert alert-error bg-red-50 border border-red-200 text-brandRed rounded-2xl text-xs font-semibold p-4 flex items-start gap-2">
+            <i class="fas fa-exclamation-triangle text-brandRed"></i>
+            <ul class="list-disc pl-4 space-y-0.5">
+                @foreach($errors->all() as $pesan)
+                    <li>{{ $pesan }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <!-- FORM EDIT PENDUDUK -->
     <form method="POST" action="{{ route('warga.update', $warga->id_warga ?? $warga->id) }}" class="space-y-4 sm:space-y-6">
         @csrf
