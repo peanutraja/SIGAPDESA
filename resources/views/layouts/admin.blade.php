@@ -47,12 +47,12 @@
     $canCreateAkun = (int)($adminSession['can_create_akun'] ?? 0);
 
     $roleLabels = [
-        'gmls' => 'Super Admin (GMLS)', 'bupati' => 'Bupati', 'camat' => 'Camat',
+        'gmls' => 'Super Admin (GMLS)', 'bpbd' => 'BPBD', 'bupati' => 'Bupati', 'camat' => 'Camat',
         'pemerintah_desa' => 'Pemerintah Desa', 'kepala_desa' => 'Kepala Desa', 'kades' => 'Kepala Desa', 
         'sekdes' => 'Sekretaris Desa', 'ketua_rw' => 'Ketua RW', 'rw' => 'Ketua RW', 'ketua_rt' => 'Ketua RT', 'rt' => 'Ketua RT',
     ];
     $displayRole = $roleLabels[$userRole] ?? strtoupper(str_replace('_', ' ', $userRole));
-    $isExecutive = in_array($userRole, ['bupati', 'camat', 'pemerintah_desa', 'kades', 'kepala_desa', 'sekdes', 'rw', 'ketua_rw']);
+    $isExecutive = in_array($userRole, ['bpbd', 'bupati','camat', 'pemerintah_desa', 'kades', 'kepala_desa', 'sekdes', 'rw', 'ketua_rw']);
     $canInputData = in_array($userRole, ['ketua_rt', 'rt', 'gmls', 'admin']);
     
     // Akses Kelola Akun: Hanya untuk GMLS/Admin OR Pejabat/Pemerintah Desa yang punya izin can_create_akun == 1
@@ -170,7 +170,7 @@
                 @if($canManageUsers)
                 <div class="pt-4 pb-1 px-3"><span class="text-[10px] uppercase font-extrabold text-slate-500">Administrator</span></div>
                 <a href="{{ route('admin.user.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all {{ request()->routeIs('admin.user.*') ? 'bg-rose-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800' }}">
-                    <i class="fas fa-users-cog w-4 text-center text-cyan-400"></i> <span>Kelola Akun Pejabat</span>
+                    <i class="fas fa-users-cog w-4 text-center text-cyan-400"></i> <span>Kelola Akun</span>
                 </a>
                 @endif
             </nav>

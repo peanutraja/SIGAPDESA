@@ -9,7 +9,7 @@ use App\Services\WilayahAkses;
 class AdminUserController extends Controller
 {
     // Role yang tersedia di kolom admin.role (enum)
-    private const ROLE_VALID = ['gmls', 'bupati', 'camat', 'pemerintah_desa', 'kepala_desa', 'ketua_rw', 'ketua_rt'];
+    private const ROLE_VALID = ['gmls', 'bpbd', 'bupati', 'camat', 'pemerintah_desa', 'kepala_desa', 'ketua_rw', 'ketua_rt'];
 
     // Role yang boleh dibuat oleh akun desa yang diberi hak can_create_akun (hanya di desanya sendiri)
     private const ROLE_BAWAHAN_DESA = ['kepala_desa', 'ketua_rw', 'ketua_rt'];

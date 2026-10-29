@@ -125,6 +125,60 @@ class DashboardController extends Controller
         }
 
         // ----------------------------------------------------
+        // 1b. DASHBOARD BPBD (pemantau seluruh Indonesia, hanya melihat)
+        // ----------------------------------------------------
+        if ($role === 'bpbd') {
+            $fProvinsi    = $request->query('provinsi');
+            $provinsiList = DB::table('provinsi')->orderBy('nama_provinsi', 'asc')->get();
+            $provinsiAktif = $fProvinsi ? $provinsiList->firstWhere('id_provinsi', (int) $fProvinsi) : null;
+
+            // Tanpa filter: rekap per provinsi. Dengan filter provinsi: rekap per kabupaten/kota di provinsi itu.
+            $rekap = $provinsiAktif
+                ? DB::table('kabupaten as wl')->leftJoin('rumah as r', 'wl.id_kabupaten', '=', 'r.id_kabupaten')
+                    ->where('wl.id_provinsi', $provinsiAktif->id_provinsi)
+                    ->groupBy('wl.id_kabupaten', 'wl.nama_kabupaten')
+                    ->select('wl.id_kabupaten as id_wilayah', 'wl.nama_kabupaten as nama_wilayah')
+                : DB::table('provinsi as wl')->leftJoin('rumah as r', 'wl.id_provinsi', '=', 'r.id_provinsi')
+                    ->groupBy('wl.id_provinsi', 'wl.nama_provinsi')
+                    ->select('wl.id_provinsi as id_wilayah', 'wl.nama_provinsi as nama_wilayah');
+
+            $rekapWilayah = $rekap
+                ->leftJoin('warga as w', 'r.id_rumah', '=', 'w.id_rumah')
+                ->addSelect(
+                    DB::raw('COUNT(DISTINCT w.id_warga) as total_warga'),
+                    DB::raw('COUNT(DISTINCT w.id_kk) as total_kk'),
+                    DB::raw('COUNT(DISTINCT CASE WHEN w.status_kehamilan = 1 THEN w.id_warga END) as total_hamil'),
+                    DB::raw("COUNT(DISTINCT CASE WHEN w.kategori_disabilitas IS NOT NULL AND w.kategori_disabilitas != 'Tidak Ada' THEN w.id_warga END) as total_disabilitas"),
+                    DB::raw('COUNT(DISTINCT CASE WHEN TIMESTAMPDIFF(YEAR, w.tanggal_lahir, CURDATE()) >= 60 THEN w.id_warga END) as total_lansia'),
+                    DB::raw('COUNT(DISTINCT CASE WHEN TIMESTAMPDIFF(YEAR, w.tanggal_lahir, CURDATE()) BETWEEN 0 AND 5 THEN w.id_warga END) as total_balita')
+                )
+                ->get()
+                ->sortByDesc('total_warga')
+                ->values();
+
+            // Peta mengikuti filter provinsi
+            if ($provinsiAktif) {
+                $idRumahProvinsi = DB::table('rumah')->where('id_provinsi', $provinsiAktif->id_provinsi)->pluck('id_rumah')->flip();
+                $rumahData = array_values(array_filter($rumahData, fn($r) => isset($idRumahProvinsi[$r['id']])));
+            }
+
+            $total_warga       = $rekapWilayah->sum('total_warga');
+            $total_kk          = $rekapWilayah->sum('total_kk');
+            $total_hamil       = $rekapWilayah->sum('total_hamil');
+            $total_disabilitas = $rekapWilayah->sum('total_disabilitas');
+            $total_lansia      = $rekapWilayah->sum('total_lansia');
+            $total_balita      = $rekapWilayah->sum('total_balita');
+            $total_wilayah_terisi = $rekapWilayah->where('total_warga', '>', 0)->count();
+            $labelWilayah      = $provinsiAktif ? 'Kabupaten/Kota' : 'Provinsi';
+
+            return view('dashboard.bpbd', compact(
+                'role', 'rekapWilayah', 'provinsiList', 'provinsiAktif', 'labelWilayah',
+                'total_warga', 'total_kk', 'total_hamil', 'total_disabilitas', 'total_lansia', 'total_balita', 'total_wilayah_terisi',
+                'adminSession', 'admin', 'rumahData'
+            ));
+        }
+
+        // ----------------------------------------------------
         // 2. DASHBOARD BUPATI
         // ----------------------------------------------------
         if ($role === 'bupati') {

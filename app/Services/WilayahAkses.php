@@ -17,6 +17,7 @@ class WilayahAkses
     private const KOLOM_WAJIB = [
         'gmls'            => [],
         'admin'           => [],
+        'bpbd'            => [], // seluruh Indonesia, tetapi hanya melihat (lihat hanyaLihat())
         'bupati'          => ['id_kabupaten'],
         'camat'           => ['id_kecamatan'],
         'pemerintah_desa' => ['id_desa'],
@@ -59,6 +60,12 @@ class WilayahAkses
     public function isGlobal(): bool
     {
         return in_array($this->role, ['gmls', 'admin'], true);
+    }
+
+    /** BPBD memantau data seluruh Indonesia tanpa hak mengubah apa pun. */
+    public function hanyaLihat(): bool
+    {
+        return $this->role === 'bpbd';
     }
 
     public function isRt(): bool

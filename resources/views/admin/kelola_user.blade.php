@@ -78,6 +78,7 @@
                         <option value="">-- Pilih Role / Jabatan --</option>
                         @if($currentUserRole === 'gmls')
                             <option value="gmls">GMLS (Super Admin - Seluruh Wilayah)</option>
+                            <option value="bpbd">BPBD (Pemantau Seluruh Indonesia - Hanya Lihat)</option>
                             <option value="bupati">Bupati (Akses 1 Kabupaten)</option>
                             <option value="camat">Camat (Akses 1 Kecamatan)</option>
                             <option value="pemerintah_desa">Pemerintah Desa (Akses Admin Desa)</option>
@@ -208,6 +209,8 @@
                             <td class="py-3.5 px-3 text-center">
                                 @if(in_array($roleVal, ['gmls', 'admin']))
                                     <span class="px-2.5 py-1 rounded-md bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-extrabold uppercase">GMLS Super Admin</span>
+                                @elseif($roleVal === 'bpbd')
+                                    <span class="px-2.5 py-1 rounded-md bg-orange-100 text-orange-800 border border-orange-200 text-[10px] font-extrabold uppercase">BPBD</span>
                                 @elseif($roleVal === 'bupati')
                                     <span class="px-2.5 py-1 rounded-md bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-bold uppercase">Bupati</span>
                                 @elseif($roleVal === 'camat')
@@ -230,6 +233,8 @@
                             <td class="py-3.5 px-3 text-slate-600">
                                 @if(in_array($roleVal, ['gmls', 'admin']))
                                     <span class="text-purple-700 font-extrabold">Nasional / Seluruh Wilayah</span>
+                                @elseif($roleVal === 'bpbd')
+                                    <span class="text-orange-700 font-extrabold">Seluruh Indonesia <span class="font-semibold text-slate-500">(hanya lihat)</span></span>
                                 @else
                                     <div class="flex flex-wrap gap-1 text-[11px]">
                                         @if(data_get($u, 'nama_kabupaten'))
@@ -411,7 +416,7 @@ function toggleWilayah() {
     $('#box_wilayah').addClass('hidden');
     $('#f_provinsi, #f_kabupaten, #f_kecamatan, #f_desa, #f_rw, #f_rt').addClass('hidden');
 
-    if (!role || role === 'gmls') return;
+    if (!role || role === 'gmls' || role === 'bpbd') return; // cakupan nasional, tanpa pilihan wilayah
 
     $('#box_wilayah').removeClass('hidden');
 

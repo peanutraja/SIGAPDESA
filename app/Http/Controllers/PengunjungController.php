@@ -71,6 +71,9 @@ class PengunjungController extends Controller
         ]);
 
         $akses = WilayahAkses::dariSession();
+        if ($akses->hanyaLihat()) {
+            return redirect()->back()->with('error', 'Akun BPBD hanya dapat melihat data.');
+        }
         $pengunjung = DB::table('pengunjung')->where('id_pengunjung', $id)->first();
         if (!$pengunjung || (!$akses->isGlobal() && !$akses->mencakup($pengunjung))) {
             return redirect()->back()->with('error', 'Laporan pendatang tidak ditemukan atau berada di luar wilayah Anda.');
